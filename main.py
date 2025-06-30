@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup
 )
-import aiohttp, asyncio
+
 from telegram.ext import (
     Application, CommandHandler, CallbackContext,
     ConversationHandler, MessageHandler, filters,
@@ -16,6 +16,21 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
 import logging
 import sys
+
+
+from flask import Flask, Response
+import threading
+
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def home():
+    return Response("OK", status=200)
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8000))
+    flask_app.run(host="0.0.0.0", port=port)
+
 
 # --- Загрузка переменных окружения ---
 load_dotenv()
@@ -111,18 +126,6 @@ def format_duration(minutes: int) -> str:
     if mins > 0:
         parts.append(f"{mins} мин")
     return " ".join(parts) if parts else "0 мин"
-
-async def self_ping():
-    while True:
-        try:
-            async with aiohttp.ClientSession() as session:
-                await session.get("https://bottelegram.onrender.com/")
-        except Exception as e:
-            print("Ошибка пинга:", e)
-        await asyncio.sleep(300)  # каждые 5 минут
-
-
-
 
 def main_menu_keyboard(user_id):
     buttons = []
@@ -961,6 +964,9 @@ def auto_return_accounts():
 
 scheduler.add_job(auto_return_accounts, 'interval', minutes=1)
 
+
+
+
 # --- Основной запуск ---
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -1042,10 +1048,10 @@ def main():
     app.add_handler(delete_acc_conv)
     app.add_handler(CallbackQueryHandler(show_all_users_handler, pattern="^show_all_users$"))
     app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer(), pattern="^ignore_"))
-    asyncio.create_task(self_ping())
     print("Бот запущен...")
-
-
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
     app.run_polling()
 
 if __name__ == '__main__':

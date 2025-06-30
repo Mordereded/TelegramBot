@@ -9223,3 +9223,27 @@ telegram.error.Conflict: Conflict: terminated by other getUpdates request; make 
 2025-06-30 18:28:07,442 [INFO] Application is stopping. This might take a moment.
 2025-06-30 18:28:07,442 [INFO] Scheduler has been shut down
 2025-06-30 18:28:07,442 [INFO] Application.stop() complete
+2025-06-30 19:47:48,383 [INFO] Added job "auto_return_accounts" to job store "default"
+2025-06-30 19:47:48,940 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://172.19.0.1:8000
+2025-06-30 19:47:48,940 [INFO] [33mPress CTRL+C to quit[0m
+2025-06-30 19:47:49,428 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getMe "HTTP/1.1 200 OK"
+2025-06-30 19:47:49,525 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/deleteWebhook "HTTP/1.1 200 OK"
+2025-06-30 19:47:49,526 [INFO] Scheduler started
+2025-06-30 19:47:49,526 [INFO] Application started
+2025-06-30 19:47:59,919 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:48:10,019 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:48:20,124 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:48:30,229 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:48:40,331 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:48:48,384 [INFO] Running job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 19:48:48 MSK)" (scheduled at 2025-06-30 19:48:48.383014+03:00)
+2025-06-30 19:48:48,388 [INFO] Job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 19:49:48 MSK)" executed successfully
+2025-06-30 19:48:49,630 [INFO] 127.0.0.1 - - [30/Jun/2025 19:48:49] "GET / HTTP/1.1" 200 -
+2025-06-30 19:48:50,432 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:49:00,531 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:49:09,661 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:49:09,661 [INFO] Application is stopping. This might take a moment.
+2025-06-30 19:49:09,661 [INFO] Scheduler has been shut down
+2025-06-30 19:49:09,661 [INFO] Application.stop() complete
