@@ -3,7 +3,6 @@ from dotenv import load_dotenv
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup
 )
-from telegram.error import BadRequest
 from telegram.ext import (
     Application, CommandHandler, CallbackContext,
     ConversationHandler, MessageHandler, filters,
@@ -49,6 +48,7 @@ class Account(Base):
     id = Column(Integer, primary_key=True)
     login = Column(String)
     password = Column(String)
+    behavior = Column(Integer)
     mmr = Column(Integer)
     status = Column(String)  # free or rented
     rented_at = Column(DateTime, nullable=True)
@@ -69,7 +69,14 @@ Base.metadata.create_all(engine)
 # --- Состояния для ConversationHandler ---
 (ADMIN_ADD_LOGIN, ADMIN_ADD_PASSWORD, ADMIN_ADD_MMR,
  ADMIN_EDIT_CHOOSE_ID, ADMIN_EDIT_CHOOSE_FIELD, ADMIN_EDIT_NEW_VALUE,
- USER_RENT_SELECT_ACCOUNT, USER_RENT_SELECT_DURATION) = range(8)
+ USER_RENT_SELECT_ACCOUNT, USER_RENT_SELECT_DURATION,
+ ADMIN_DELETE_CHOOSE_ID,ADMIN_ADD_BEHAVIOR) = range(10)
+(
+    RETURN_CONFIRM_UPDATE,
+    RETURN_SELECT_FIELDS,
+    RETURN_INPUT_MMR,
+    RETURN_INPUT_BEHAVIOR
+) = range(200, 204)
 
 # --- Вспомогательные функции ---
 def is_admin(user_id):
@@ -105,22 +112,30 @@ def format_duration(minutes: int) -> str:
     return " ".join(parts) if parts else "0 мин"
 
 def main_menu_keyboard(user_id):
-    buttons_user = [
-        [InlineKeyboardButton("🔍 Список аккаунтов", callback_data="list")],
-        [InlineKeyboardButton("📦 Мой аккаунт", callback_data="my")],
-        [InlineKeyboardButton("📥 Взять в аренду", callback_data="rent_start")],
-        [InlineKeyboardButton("📤 Вернуть аккаунт", callback_data="return")],
-        [InlineKeyboardButton("👤 Кто я", callback_data="whoami")]
-    ]
+    buttons = []
+
+    # Блок пользователя
+    buttons.append([InlineKeyboardButton("⠀", callback_data="ignore_gap")])
+    buttons.append([InlineKeyboardButton("👤 Пользовательское меню:", callback_data="ignore_user_menu")])
+    buttons.append([InlineKeyboardButton("🔍 Список аккаунтов", callback_data="list")])
+    buttons.append([InlineKeyboardButton("📦 Мой аккаунт", callback_data="my")])
+    buttons.append([InlineKeyboardButton("📥 Взять в аренду", callback_data="rent_start")])
+    buttons.append([InlineKeyboardButton("📤 Вернуть аккаунт", callback_data="return")])
+    buttons.append([InlineKeyboardButton("👤 Кто я", callback_data="whoami")])
+
+
+    # Блок администратора (если админ)
     if is_admin(user_id):
-        buttons_user.append([
-            InlineKeyboardButton("🛠️ Админ: Список аккаунтов", callback_data="list"),
-            InlineKeyboardButton("➕ Добавить аккаунт", callback_data="admin_add_start"),
-            InlineKeyboardButton("✏️ Редактировать аккаунт", callback_data="admin_edit_start"),
-        ])
-        buttons_user.append([InlineKeyboardButton("🆕 Новые пользователи", callback_data="show_pending_users")])
-        buttons_user.append([InlineKeyboardButton("📋 Все пользователи", callback_data="show_all_users")])
-    return InlineKeyboardMarkup(buttons_user)
+        buttons.append([InlineKeyboardButton("⠀", callback_data="ignore_gap")])
+        buttons.append([InlineKeyboardButton("🛡 Админ-панель:", callback_data="ignore_admin_panel")])
+        buttons.append([InlineKeyboardButton("➕ Добавить аккаунт", callback_data="admin_add_start")])
+        buttons.append([InlineKeyboardButton("✏️ Редактировать аккаунт", callback_data="admin_edit_start")])
+        buttons.append([InlineKeyboardButton("🗑 Удалить аккаунт", callback_data="admin_delete_start")])
+        buttons.append([InlineKeyboardButton("📋 Все пользователи", callback_data="show_all_users")])
+        buttons.append([InlineKeyboardButton("🆕 Новые пользователи", callback_data="show_pending_users")])
+        buttons.append([InlineKeyboardButton("⠀", callback_data="ignore_gap")])
+
+    return InlineKeyboardMarkup(buttons)
 
 async def notify_admins_new_user(session, new_user: User, app: Application):
     for admin_id in ADMIN_IDS:
@@ -206,13 +221,13 @@ async def list_accounts(update: Update, context: CallbackContext):
                         f"Арендатор Telegram ID: {acc.renter_id or '—'}\n"
                     )
                 text += (
-                    f"ID: {acc.id}\nMMR: {acc.mmr}\nСтатус: {acc.status}\n"
+                    f"ID: {acc.id}\nMMR: {acc.mmr}\nBehavior: {acc.behavior or '—'}\nСтатус: {acc.status}\n"
                     f"Логин: {acc.login}\nПароль: {acc.password}\n{rent_info}\n"
                 )
         else:
             for acc in accounts:
                 status = "✅ Свободен" if acc.status == "free" else "⛔ Арендован"
-                text += f"ID: {acc.id}\nMMR: {acc.mmr}\nСтатус: {status}\n\n"
+                text += f"ID: {acc.id}\nMMR: {acc.mmr}\nBehavior: {acc.behavior or '—'} \nСтатус: {status}\n\n"
 
         if not text:
             text = "Нет аккаунтов."
@@ -224,7 +239,6 @@ async def list_accounts(update: Update, context: CallbackContext):
             current_markup = update.callback_query.message.reply_markup
             new_markup = main_menu_keyboard(user_id)
 
-            # Сравним текст и клавиатуры (строгое сравнение невозможно, поэтому можно сравнить данные клавиатуры)
             def markup_equals(m1, m2):
                 if m1 is None and m2 is None:
                     return True
@@ -264,7 +278,7 @@ async def my(update: Update, context: CallbackContext):
                 rent_end = acc.rented_at + timedelta(minutes=acc.rent_duration) if acc.rented_at and acc.rent_duration else None
                 duration_str = format_duration(acc.rent_duration) if acc.rent_duration else "—"
                 text += (
-                    f"ID: {acc.id}\nMMR: {acc.mmr}\nСтатус: аренда\n"
+                    f"ID: {acc.id}\nMMR: {acc.mmr}\nBehavior: {acc.behavior or '—'}\nСтатус: аренда\n"
                     f"Логин: {acc.login}\nПароль: {acc.password}\n"
                     f"Взято: {format_datetime(acc.rented_at)}\n"
                     f"Длительность: {duration_str}\n"
@@ -440,37 +454,106 @@ async def return_account(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     session = Session()
     try:
-        user_obj = session.query(User).filter_by(telegram_id=user_id).first()
-
-        if not user_obj:
-            return await show_registration_error(update, "Вы не зарегистрированы.")
-        if not user_obj.is_approved:
-            return await show_registration_error(update, "Ваш аккаунт ещё не подтверждён админом.")
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if not user or not user.is_approved:
+            return await show_registration_error(update, "Вы не зарегистрированы или не подтверждены.")
 
         acc = session.query(Account).filter_by(renter_id=user_id, status="rented").first()
         if not acc:
-            if update.callback_query:
-                await update.callback_query.answer("У вас нет арендованных аккаунтов.", show_alert=True)
-            elif update.message:
-                await update.message.reply_text("У вас нет арендованных аккаунтов.", reply_markup=main_menu_keyboard(user_id))
-            return
+            await update.callback_query.answer("У вас нет арендованных аккаунтов.", show_alert=True)
+            return ConversationHandler.END
 
+        context.user_data["return_acc_id"] = acc.id
+
+        buttons = [
+            [InlineKeyboardButton("Да", callback_data="return_update_yes")],
+            [InlineKeyboardButton("Нет", callback_data="return_update_no")]
+        ]
+        await update.callback_query.edit_message_text(
+            "Вы хотите обновить MMR или Behavior перед возвратом?",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return RETURN_CONFIRM_UPDATE
+    finally:
+        session.close()
+
+async def return_confirm_handler(update: Update, context: CallbackContext):
+    if update.callback_query.data == "return_update_yes":
+        buttons = [
+            [InlineKeyboardButton("MMR", callback_data="update_mmr")],
+            [InlineKeyboardButton("Behavior", callback_data="update_behavior")],
+            [InlineKeyboardButton("Оба", callback_data="update_both")]
+        ]
+        await update.callback_query.edit_message_text(
+            "Что вы хотите обновить?",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return RETURN_SELECT_FIELDS
+    else:
+        return await finalize_return(update, context)  # обычный возврат без изменений
+
+async def return_input_mmr(update: Update, context: CallbackContext):
+    mmr = update.message.text.strip()
+    if not mmr.isdigit():
+        await update.message.reply_text("MMR должен быть числом:")
+        return RETURN_INPUT_MMR
+    context.user_data["new_mmr"] = int(mmr)
+
+    if context.user_data["update_choice"] == "update_both":
+        await update.message.reply_text("Введите новый Behavior:")
+        return RETURN_INPUT_BEHAVIOR
+    else:
+        return await finalize_return(update, context)
+
+async def return_input_behavior(update: Update, context: CallbackContext):
+    behavior = update.message.text.strip()
+    if not behavior.isdigit():
+        await update.message.reply_text("Behavior должен быть числом:")
+        return RETURN_INPUT_BEHAVIOR
+    context.user_data["new_behavior"] = int(behavior)
+    return await finalize_return(update, context)
+
+async def finalize_return(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    session = Session()
+    try:
+        acc = session.query(Account).get(context.user_data["return_acc_id"])
         acc.status = "free"
         acc.renter_id = None
         acc.rented_at = None
         acc.rent_duration = None
+
+        if "new_mmr" in context.user_data:
+            acc.mmr = context.user_data["new_mmr"]
+        if "new_behavior" in context.user_data:
+            acc.behavior = context.user_data["new_behavior"]
+
         session.commit()
 
-        text = f"Аккаунт ID {acc.id} успешно возвращён. Спасибо за использование!"
-        logging.info(f"User {user_id} returned account {acc.id}.")
-
-        if update.callback_query:
-            await update.callback_query.edit_message_text(text, reply_markup=main_menu_keyboard(user_id))
-        elif update.message:
+        text = f"Аккаунт ID {acc.id} успешно возвращён!"
+        if update.message:
             await update.message.reply_text(text, reply_markup=main_menu_keyboard(user_id))
-
+        else:
+            await update.callback_query.edit_message_text(text, reply_markup=main_menu_keyboard(user_id))
     finally:
         session.close()
+        context.user_data.clear()
+    return ConversationHandler.END
+
+
+async def return_select_fields(update: Update, context: CallbackContext):
+    data = update.callback_query.data
+    context.user_data["update_choice"] = data
+    if data == "update_mmr":
+        await update.callback_query.edit_message_text("Введите новый MMR:")
+        return RETURN_INPUT_MMR
+    elif data == "update_behavior":
+        await update.callback_query.edit_message_text("Введите новый Behavior:")
+        return RETURN_INPUT_BEHAVIOR
+    elif data == "update_both":
+        await update.callback_query.edit_message_text("Введите новый MMR:")
+        return RETURN_INPUT_MMR
+
 
 
 # --- Админ: Показать новых пользователей ---
@@ -544,9 +627,6 @@ async def admin_approve_reject_handler(update: Update, context: CallbackContext)
             if user:
                 if is_admin(target_id):
                     await query.answer("Нельзя отклонить администратора!", show_alert=True)
-                    return
-                if not user.is_approved:
-                    await query.answer("Пользователь уже не подтверждён", show_alert=True)
                     return
                 user.is_approved = False
                 session.commit()
@@ -671,6 +751,15 @@ async def admin_add_login_handler(update: Update, context: CallbackContext):
 
 async def admin_add_password_handler(update: Update, context: CallbackContext):
     context.user_data['new_password'] = update.message.text.strip()
+    await update.message.reply_text("Введите Behavior аккаунта (число):")
+    return ADMIN_ADD_BEHAVIOR
+
+async def admin_add_behavior_handler(update: Update, context: CallbackContext):
+    behavior_text = update.message.text.strip()
+    if not behavior_text.isdigit():
+        await update.message.reply_text("Behavior должен быть числом. Попробуйте снова:")
+        return ADMIN_ADD_BEHAVIOR
+    context.user_data['new_behavior'] = int(behavior_text)
     await update.message.reply_text("Введите MMR аккаунта (число):")
     return ADMIN_ADD_MMR
 
@@ -685,6 +774,7 @@ async def admin_add_mmr_handler(update: Update, context: CallbackContext):
         new_acc = Account(
             login=context.user_data['new_login'],
             password=context.user_data['new_password'],
+            behavior=context.user_data['new_behavior'],
             mmr=mmr,
             status="free",
             rented_at=None,
@@ -693,7 +783,10 @@ async def admin_add_mmr_handler(update: Update, context: CallbackContext):
         )
         session.add(new_acc)
         session.commit()
-        await update.message.reply_text(f"Аккаунт успешно добавлен:\nID {new_acc.id}, MMR {new_acc.mmr}", reply_markup=main_menu_keyboard(update.effective_user.id))
+        await update.message.reply_text(
+            f"Аккаунт успешно добавлен:\nID {new_acc.id}, MMR {new_acc.mmr}",
+            reply_markup=main_menu_keyboard(update.effective_user.id)
+        )
     finally:
         session.close()
     return ConversationHandler.END
@@ -713,7 +806,7 @@ async def admin_edit_start(update: Update, context: CallbackContext):
         accounts = session.query(Account).all()
         buttons = []
         for acc in accounts:
-            buttons.append([InlineKeyboardButton(f"ID {acc.id} MMR {acc.mmr} Статус {acc.status}", callback_data=f"edit_acc_{acc.id}")])
+            buttons.append([InlineKeyboardButton(f"ID: {acc.id}\n Login: {acc.login}\n MMR: {acc.mmr}\n Статус: {acc.status}", callback_data=f"edit_acc_{acc.id}")])
         buttons.append([InlineKeyboardButton("Отмена", callback_data="admin_back")])
         await update.callback_query.edit_message_text("Выберите аккаунт для редактирования:", reply_markup=InlineKeyboardMarkup(buttons))
     finally:
@@ -721,6 +814,7 @@ async def admin_edit_start(update: Update, context: CallbackContext):
     return ADMIN_EDIT_CHOOSE_ID
 
 async def admin_edit_choose_id(update: Update, context: CallbackContext):
+    logging.info(">>> Вызван admin_edit_choose_id")
     query = update.callback_query
     data = query.data
     acc_id = int(data.split("_")[-1])
@@ -730,6 +824,7 @@ async def admin_edit_choose_id(update: Update, context: CallbackContext):
         [InlineKeyboardButton("Логин", callback_data="edit_field_login")],
         [InlineKeyboardButton("Пароль", callback_data="edit_field_password")],
         [InlineKeyboardButton("MMR", callback_data="edit_field_mmr")],
+        [InlineKeyboardButton("Behavior", callback_data="edit_field_behavior")],
         [InlineKeyboardButton("Отмена", callback_data="admin_back")]
     ]
     await query.edit_message_text("Выберите поле для редактирования:", reply_markup=InlineKeyboardMarkup(buttons))
@@ -755,9 +850,9 @@ async def admin_edit_new_value(update: Update, context: CallbackContext):
             await update.message.reply_text("Аккаунт не найден.", reply_markup=main_menu_keyboard(user_id))
             return ConversationHandler.END
         # Валидация MMR
-        if field == "mmr":
+        if field == "mmr" or field == 'behavior':
             if not value.isdigit():
-                await update.message.reply_text("MMR должно быть числом. Попробуйте снова:")
+                await update.message.reply_text(f"{field} должно быть числом. Попробуйте снова:")
                 return ADMIN_EDIT_NEW_VALUE
             setattr(acc, field, int(value))
         else:
@@ -769,7 +864,59 @@ async def admin_edit_new_value(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 async def admin_edit_cancel(update: Update, context: CallbackContext):
-    await update.message.reply_text("Редактирование аккаунта отменено.", reply_markup=main_menu_keyboard(update.effective_user.id))
+    user_id = update.effective_user.id
+
+    if update.message:  # отмена через команду
+        await update.message.reply_text("Редактирование аккаунта отменено.", reply_markup=main_menu_keyboard(user_id))
+    elif update.callback_query:  # отмена через кнопку
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text("Редактирование аккаунта отменено.", reply_markup=main_menu_keyboard(user_id))
+
+    return ConversationHandler.END
+
+
+async def admin_delete_start(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.callback_query.answer("Доступ запрещён", show_alert=True)
+        return ConversationHandler.END
+    session = Session()
+    try:
+        accounts = session.query(Account).all()
+        if not accounts:
+            await update.callback_query.edit_message_text("Аккаунтов нет.", reply_markup=main_menu_keyboard(user_id))
+            return ConversationHandler.END
+
+        buttons = [
+            [InlineKeyboardButton(f"ID {acc.id} MMR {acc.mmr} Статус {acc.status}", callback_data=f"delete_acc_{acc.id}")]
+            for acc in accounts
+        ]
+        buttons.append([InlineKeyboardButton("Отмена", callback_data="admin_back")])
+        await update.callback_query.edit_message_text("Выберите аккаунт для удаления:", reply_markup=InlineKeyboardMarkup(buttons))
+    finally:
+        session.close()
+    return ADMIN_DELETE_CHOOSE_ID
+
+async def admin_delete_choose_account(update: Update, context: CallbackContext):
+    query = update.callback_query
+    user_id = query.from_user.id
+    logging.info(f"admin_delete_choose_id called with data: {user_id}")
+    if not is_admin(user_id):
+        await query.answer("Доступ запрещён", show_alert=True)
+        return ConversationHandler.END
+
+    acc_id = int(query.data.split("_")[-1])
+    session = Session()
+    try:
+        acc = session.query(Account).filter_by(id=acc_id).first()
+        if not acc:
+            await query.answer("Аккаунт не найден", show_alert=True)
+            return ConversationHandler.END
+        session.delete(acc)
+        session.commit()
+        await query.edit_message_text(f"Аккаунт ID {acc_id} удалён.", reply_markup=main_menu_keyboard(user_id))
+    finally:
+        session.close()
     return ConversationHandler.END
 
 # --- Автоматический возврат аккаунтов по времени ---
@@ -799,24 +946,28 @@ scheduler.add_job(auto_return_accounts, 'interval', minutes=1)
 def main():
     app = Application.builder().token(TOKEN).build()
 
-    # Команды
     app.add_handler(CommandHandler("start", start))
 
-    # CallbackQuery хендлеры для админских действий по пользователям (одобрение, отклонение, удаление)
     app.add_handler(CallbackQueryHandler(
         admin_approve_reject_handler,
         pattern=r"^(approve_user_\d+|reject_user_\d+|delete_user_\d+|show_pending_users|show_all_users|admin_back)$"
     ))
 
-    # Отдельный обработчик для просмотра списка аккаунтов
     app.add_handler(CallbackQueryHandler(list_accounts, pattern="^list$"))
-
-    # Другие основные CallbackQuery обработчики
     app.add_handler(CallbackQueryHandler(my, pattern="^my$"))
     app.add_handler(CallbackQueryHandler(whoami, pattern="^whoami$"))
-    app.add_handler(CallbackQueryHandler(return_account, pattern="^return$"))
+    return_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(return_account, pattern="^return$")],
+        states={
+            RETURN_CONFIRM_UPDATE: [CallbackQueryHandler(return_confirm_handler, pattern="^return_update_(yes|no)$")],
+            RETURN_SELECT_FIELDS: [CallbackQueryHandler(return_select_fields, pattern="^update_(mmr|behavior|both)$")],
+            RETURN_INPUT_MMR: [MessageHandler(filters.TEXT & ~filters.COMMAND, return_input_mmr)],
+            RETURN_INPUT_BEHAVIOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, return_input_behavior)],
+        },
+        fallbacks=[],
+    )
+    app.add_handler(return_conv)
 
-    # Разговорный хендлер для аренды аккаунта
     rent_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(rent_start, pattern="^rent_start$")],
         states={
@@ -828,35 +979,50 @@ def main():
     )
     app.add_handler(rent_conv)
 
-    # Разговорный хендлер для добавления аккаунта (админ)
     add_acc_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_add_start, pattern="^admin_add_start$")],
         states={
             ADMIN_ADD_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_login_handler)],
             ADMIN_ADD_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_password_handler)],
+            ADMIN_ADD_BEHAVIOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_behavior_handler)],
             ADMIN_ADD_MMR: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_mmr_handler)],
         },
         fallbacks=[CommandHandler('cancel', admin_add_cancel)]
     )
     app.add_handler(add_acc_conv)
-    # Разговорный хендлер для редактирования аккаунта (админ)
+
     edit_acc_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_edit_start, pattern="^admin_edit_start$")],
         states={
-            ADMIN_EDIT_CHOOSE_ID: [CallbackQueryHandler(admin_edit_choose_id, pattern="^edit_acc_\\d+$")],
-            ADMIN_EDIT_CHOOSE_FIELD: [CallbackQueryHandler(admin_edit_choose_field, pattern="^edit_field_\\w+$")],
-            ADMIN_EDIT_NEW_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_edit_new_value)],
+            ADMIN_EDIT_CHOOSE_ID: [
+                CallbackQueryHandler(admin_edit_choose_id, pattern="^edit_acc_\\d+$"),
+
+            ],
+            ADMIN_EDIT_CHOOSE_FIELD: [
+                CallbackQueryHandler(admin_edit_choose_field, pattern="^edit_field_\\w+$")
+            ],
+            ADMIN_EDIT_NEW_VALUE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_edit_new_value)
+            ],
         },
-        fallbacks=[CommandHandler('cancel', admin_edit_cancel)]
+        fallbacks=[
+            CommandHandler('cancel', admin_edit_cancel),
+            CallbackQueryHandler(admin_edit_cancel, pattern="^admin_back$"),
+        ],
+        allow_reentry=True
     )
+
     app.add_handler(edit_acc_conv)
-
-    # Показать новых пользователей (админ)
-    app.add_handler(CallbackQueryHandler(show_pending_users_handler, pattern="^show_pending_users$"))
-
-    # Показать всех пользователей (админ)
+    delete_acc_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_delete_start, pattern="^admin_delete_start$")],
+        states={
+            ADMIN_DELETE_CHOOSE_ID: [CallbackQueryHandler(admin_delete_choose_account, pattern="^delete_acc_\\d+$")]
+        },
+        fallbacks=[CallbackQueryHandler(admin_edit_cancel, pattern="^admin_back$")],
+    )
+    app.add_handler(delete_acc_conv)
     app.add_handler(CallbackQueryHandler(show_all_users_handler, pattern="^show_all_users$"))
-
+    app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer(), pattern="^ignore_"))
     print("Бот запущен...")
     app.run_polling()
 
