@@ -9030,3 +9030,196 @@ telegram.error.BadRequest: Message is not modified: specified new message conten
 2025-06-30 17:45:29,209 [INFO] Application is stopping. This might take a moment.
 2025-06-30 17:45:29,209 [INFO] Scheduler has been shut down
 2025-06-30 17:45:29,209 [INFO] Application.stop() complete
+2025-06-30 18:20:57,346 [INFO] Added job "auto_return_accounts" to job store "default"
+2025-06-30 18:20:58,374 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getMe "HTTP/1.1 200 OK"
+2025-06-30 18:20:58,469 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/deleteWebhook "HTTP/1.1 200 OK"
+2025-06-30 18:20:58,469 [INFO] Scheduler started
+2025-06-30 18:20:58,469 [INFO] Application started
+2025-06-30 18:20:58,862 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:20:58,987 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 200 OK"
+2025-06-30 18:21:02,175 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:21:02,427 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 400 Bad Request"
+2025-06-30 18:21:02,428 [ERROR] No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_application.py", line 1309, in process_update
+    await coroutine
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_handlers\basehandler.py", line 158, in handle_update
+    return await self.callback(update, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\main.py", line 301, in my
+    await update.callback_query.edit_message_text(text, reply_markup=main_menu_keyboard(user_id))
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_callbackquery.py", line 265, in edit_message_text
+    return await self._get_message().edit_text(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_message.py", line 3788, in edit_text
+    return await self.get_bot().edit_message_text(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_extbot.py", line 1722, in edit_message_text
+    return await super().edit_message_text(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_bot.py", line 4293, in edit_message_text
+    return await self._send_message(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_extbot.py", line 629, in _send_message
+    result = await super()._send_message(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_bot.py", line 809, in _send_message
+    result = await self._post(
+             ^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_bot.py", line 697, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_extbot.py", line 369, in _do_post
+    return await super()._do_post(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_bot.py", line 726, in _do_post
+    result = await request.post(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\request\_baserequest.py", line 197, in post
+    result = await self._request_wrapper(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\request\_baserequest.py", line 374, in _request_wrapper
+    raise exception
+telegram.error.BadRequest: Message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message
+2025-06-30 18:21:07,199 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:21:07,351 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 200 OK"
+2025-06-30 18:21:17,320 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:21:27,419 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:21:37,521 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:21:47,624 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:21:57,346 [INFO] Running job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:21:57 MSK)" (scheduled at 2025-06-30 18:21:57.346068+03:00)
+2025-06-30 18:21:57,347 [INFO] Job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:22:57 MSK)" executed successfully
+2025-06-30 18:21:57,724 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:22:07,519 [INFO] Added job "auto_return_accounts" to job store "default"
+2025-06-30 18:22:09,160 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getMe "HTTP/1.1 200 OK"
+2025-06-30 18:22:09,256 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/deleteWebhook "HTTP/1.1 200 OK"
+2025-06-30 18:22:09,257 [INFO] Scheduler started
+2025-06-30 18:22:09,258 [INFO] Application started
+2025-06-30 18:22:13,626 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:22:13,791 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/sendMessage "HTTP/1.1 200 OK"
+2025-06-30 18:22:23,736 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:22:25,060 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:22:25,532 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/sendMessage "HTTP/1.1 200 OK"
+2025-06-30 18:22:28,102 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:22:28,254 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 200 OK"
+2025-06-30 18:22:38,201 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:22:41,110 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:22:41,611 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/sendMessage "HTTP/1.1 200 OK"
+2025-06-30 18:22:51,210 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:22:58,798 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:22:59,235 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 200 OK"
+2025-06-30 18:23:00,414 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:23:00,415 [INFO] >>> Вызван admin_edit_choose_id
+2025-06-30 18:23:00,539 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 200 OK"
+2025-06-30 18:23:02,532 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:23:02,730 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 200 OK"
+2025-06-30 18:23:07,520 [INFO] Running job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:23:07 MSK)" (scheduled at 2025-06-30 18:23:07.519492+03:00)
+2025-06-30 18:23:07,522 [INFO] Job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:24:07 MSK)" executed successfully
+2025-06-30 18:23:12,628 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:23:21,360 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:23:21,790 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/sendMessage "HTTP/1.1 200 OK"
+2025-06-30 18:23:24,241 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:23:24,427 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 200 OK"
+2025-06-30 18:23:34,339 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:23:44,436 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:23:54,531 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:24:04,627 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:24:07,519 [INFO] Running job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:25:07 MSK)" (scheduled at 2025-06-30 18:24:07.519492+03:00)
+2025-06-30 18:24:07,520 [INFO] Job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:25:07 MSK)" executed successfully
+2025-06-30 18:24:14,727 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:24:21,485 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:24:21,895 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 200 OK"
+2025-06-30 18:24:31,582 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:24:41,677 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:24:51,775 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:25:01,876 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:25:07,520 [INFO] Running job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:26:07 MSK)" (scheduled at 2025-06-30 18:25:07.519492+03:00)
+2025-06-30 18:25:07,521 [INFO] Job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:26:07 MSK)" executed successfully
+2025-06-30 18:25:11,972 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:25:22,068 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:25:32,164 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:25:42,286 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:25:52,381 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:26:02,477 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:26:07,520 [INFO] Running job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:27:07 MSK)" (scheduled at 2025-06-30 18:26:07.519492+03:00)
+2025-06-30 18:26:07,521 [INFO] Job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:27:07 MSK)" executed successfully
+2025-06-30 18:26:12,574 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:26:22,668 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:26:32,501 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 409 Conflict"
+2025-06-30 18:26:32,501 [ERROR] No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_utils\networkloop.py", line 115, in network_retry_loop
+    if not await do_action():
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_utils\networkloop.py", line 108, in do_action
+    return action_cb_task.result()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_extbot.py", line 669, in get_updates
+    updates = await super().get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_bot.py", line 4610, in get_updates
+    await self._post(
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_bot.py", line 697, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_extbot.py", line 369, in _do_post
+    return await super()._do_post(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_bot.py", line 726, in _do_post
+    result = await request.post(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\request\_baserequest.py", line 197, in post
+    result = await self._request_wrapper(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\request\_baserequest.py", line 374, in _request_wrapper
+    raise exception
+telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-06-30 18:26:36,949 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 409 Conflict"
+2025-06-30 18:26:36,950 [ERROR] No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_utils\networkloop.py", line 115, in network_retry_loop
+    if not await do_action():
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_utils\networkloop.py", line 108, in do_action
+    return action_cb_task.result()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_extbot.py", line 669, in get_updates
+    updates = await super().get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_bot.py", line 4610, in get_updates
+    await self._post(
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_bot.py", line 697, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\ext\_extbot.py", line 369, in _do_post
+    return await super()._do_post(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\_bot.py", line 726, in _do_post
+    result = await request.post(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\request\_baserequest.py", line 197, in post
+    result = await self._request_wrapper(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\one\PycharmProjects\TelegramBotForDota\.venv\Lib\site-packages\telegram\request\_baserequest.py", line 374, in _request_wrapper
+    raise exception
+telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-06-30 18:26:48,546 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:26:58,643 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:27:07,520 [INFO] Running job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:28:07 MSK)" (scheduled at 2025-06-30 18:27:07.519492+03:00)
+2025-06-30 18:27:07,521 [INFO] Job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 18:28:07 MSK)" executed successfully
+2025-06-30 18:27:08,737 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:27:18,832 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:27:28,928 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:27:39,023 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:27:49,121 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:27:59,226 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:28:07,442 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 18:28:07,442 [INFO] Application is stopping. This might take a moment.
+2025-06-30 18:28:07,442 [INFO] Scheduler has been shut down
+2025-06-30 18:28:07,442 [INFO] Application.stop() complete

@@ -165,8 +165,18 @@ async def start(update: Update, context: CallbackContext):
     session = Session()
     try:
         existing_user = session.query(User).filter_by(telegram_id=user_id).first()
-        if not existing_user:
-            is_approved = True if is_admin(user_id) else False
+
+        if existing_user:
+            if existing_user.is_approved:
+                role = "Админ" if is_admin(user_id) else "Пользователь"
+                await update.message.reply_text(
+                    f"Привет, {role}! Этот бот позволяет арендовать Steam аккаунты с Dota 2 MMR.",
+                    reply_markup=main_menu_keyboard(user_id)
+                )
+            else:
+                await update.message.reply_text("Ваш аккаунт ещё не подтверждён админом. Пожалуйста, подождите.")
+        else:
+            is_approved = is_admin(user_id)
             new_user = User(
                 telegram_id=user_id,
                 username=user.username,
@@ -177,21 +187,17 @@ async def start(update: Update, context: CallbackContext):
             )
             session.add(new_user)
             session.commit()
+
             if is_approved:
-                text = "Привет, Админ! Этот бот позволяет арендовать Steam аккаунты с Dota 2 MMR."
-                await update.message.reply_text(text, reply_markup=main_menu_keyboard(user_id))
+                await update.message.reply_text(
+                    "Привет, Админ! Этот бот позволяет арендовать Steam аккаунты с Dota 2 MMR.",
+                    reply_markup=main_menu_keyboard(user_id)
+                )
             else:
                 await update.message.reply_text(
-                    "Спасибо за регистрацию! Ваш аккаунт ожидает подтверждения админом. Пожалуйста, дождитесь подтверждения.",
+                    "Спасибо за регистрацию! Ваш аккаунт ожидает подтверждения админом. Пожалуйста, дождитесь подтверждения."
                 )
                 await notify_admins_new_user(session, new_user, context.application)
-        else:
-            if existing_user.is_approved:
-                role = "Админ" if is_admin(user_id) else "Пользователь"
-                text = f"Привет, {role}! Этот бот позволяет арендовать Steam аккаунты с Dota 2 MMR."
-                await update.message.reply_text(text, reply_markup=main_menu_keyboard(user_id))
-            else:
-                await update.message.reply_text("Ваш аккаунт ещё не подтверждён админом. Пожалуйста, подождите.")
     finally:
         session.close()
 
