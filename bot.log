@@ -9247,3 +9247,48 @@ telegram.error.Conflict: Conflict: terminated by other getUpdates request; make 
 2025-06-30 19:49:09,661 [INFO] Application is stopping. This might take a moment.
 2025-06-30 19:49:09,661 [INFO] Scheduler has been shut down
 2025-06-30 19:49:09,661 [INFO] Application.stop() complete
+2025-06-30 19:49:12,931 [INFO] Added job "auto_return_accounts" to job store "default"
+2025-06-30 19:49:13,566 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://172.19.0.1:8000
+2025-06-30 19:49:13,566 [INFO] [33mPress CTRL+C to quit[0m
+2025-06-30 19:49:13,972 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getMe "HTTP/1.1 200 OK"
+2025-06-30 19:49:14,070 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/deleteWebhook "HTTP/1.1 200 OK"
+2025-06-30 19:49:14,070 [INFO] Scheduler started
+2025-06-30 19:49:14,071 [INFO] Application started
+2025-06-30 19:49:24,467 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:49:25,059 [INFO] 127.0.0.1 - - [30/Jun/2025 19:49:25] "GET / HTTP/1.1" 200 -
+2025-06-30 19:49:30,722 [INFO] 127.0.0.1 - - [30/Jun/2025 19:49:30] "GET / HTTP/1.1" 200 -
+2025-06-30 19:49:31,807 [INFO] 127.0.0.1 - - [30/Jun/2025 19:49:31] "GET / HTTP/1.1" 200 -
+2025-06-30 19:49:34,566 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:49:38,285 [INFO] 127.0.0.1 - - [30/Jun/2025 19:49:38] "GET / HTTP/1.1" 200 -
+2025-06-30 19:49:40,380 [INFO] 127.0.0.1 - - [30/Jun/2025 19:49:40] "GET / HTTP/1.1" 200 -
+2025-06-30 19:49:41,500 [INFO] 127.0.0.1 - - [30/Jun/2025 19:49:41] "GET / HTTP/1.1" 200 -
+2025-06-30 19:49:42,395 [INFO] 127.0.0.1 - - [30/Jun/2025 19:49:42] "GET / HTTP/1.1" 200 -
+2025-06-30 19:49:43,188 [INFO] 127.0.0.1 - - [30/Jun/2025 19:49:43] "GET / HTTP/1.1" 200 -
+2025-06-30 19:49:43,948 [INFO] 127.0.0.1 - - [30/Jun/2025 19:49:43] "GET / HTTP/1.1" 200 -
+2025-06-30 19:49:44,663 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:49:54,762 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:50:04,861 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:50:12,932 [INFO] Running job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 19:50:12 MSK)" (scheduled at 2025-06-30 19:50:12.931714+03:00)
+2025-06-30 19:50:12,936 [INFO] Job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 19:51:12 MSK)" executed successfully
+2025-06-30 19:50:14,960 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:50:25,060 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:50:35,157 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:50:45,258 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:50:55,356 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:51:05,456 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:51:12,932 [INFO] Running job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 19:52:12 MSK)" (scheduled at 2025-06-30 19:51:12.931714+03:00)
+2025-06-30 19:51:12,933 [INFO] Job "auto_return_accounts (trigger: interval[0:01:00], next run at: 2025-06-30 19:52:12 MSK)" executed successfully
+2025-06-30 19:51:15,557 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:51:25,656 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:51:35,785 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:51:41,256 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:51:41,813 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-06-30 19:51:41,971 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 200 OK"
+2025-06-30 19:51:44,498 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:51:44,617 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 200 OK"
+2025-06-30 19:51:54,602 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:51:55,116 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/getUpdates "HTTP/1.1 200 OK"
+2025-06-30 19:51:55,530 [INFO] HTTP Request: POST https://api.telegram.org/bot7789952387:AAFpOX8YX9jFXB65FzE27f75knyysYGQ9jM/editMessageText "HTTP/1.1 200 OK"
