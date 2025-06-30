@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup
 )
+import aiohttp, asyncio
 from telegram.ext import (
     Application, CommandHandler, CallbackContext,
     ConversationHandler, MessageHandler, filters,
@@ -110,6 +111,18 @@ def format_duration(minutes: int) -> str:
     if mins > 0:
         parts.append(f"{mins} мин")
     return " ".join(parts) if parts else "0 мин"
+
+async def self_ping():
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                await session.get("https://bottelegram.onrender.com/")
+        except Exception as e:
+            print("Ошибка пинга:", e)
+        await asyncio.sleep(300)  # каждые 5 минут
+
+
+
 
 def main_menu_keyboard(user_id):
     buttons = []
@@ -1029,7 +1042,10 @@ def main():
     app.add_handler(delete_acc_conv)
     app.add_handler(CallbackQueryHandler(show_all_users_handler, pattern="^show_all_users$"))
     app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer(), pattern="^ignore_"))
+    asyncio.create_task(self_ping())
     print("Бот запущен...")
+
+
     app.run_polling()
 
 if __name__ == '__main__':
