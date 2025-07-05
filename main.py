@@ -14,6 +14,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
+from pytz import timezone
 import logging
 import sys
 
@@ -43,8 +44,11 @@ ADMIN_IDS = set()
 if os.getenv("ADMIN_IDS"):
     ADMIN_IDS = set(map(int, filter(None, os.getenv("ADMIN_IDS").split(","))))
 
+
+tz = timezone("Europe/Moscow")
 Base = declarative_base()
-engine = create_engine('sqlite:///accounts.db', connect_args={"check_same_thread": False})
+DATABASE_URL = os.getenv("DATABASE_URL")
+engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 scheduler = BackgroundScheduler()
 scheduler.start()
@@ -78,7 +82,7 @@ class User(Base):
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     is_approved = Column(Boolean, default=False)
-    registered_at = Column(DateTime, default=datetime.now)
+    registered_at = Column(DateTime, default=datetime.now(tz))
 
 Base.metadata.create_all(engine)
 
@@ -417,14 +421,12 @@ async def cancel_rent(update: Update, context: CallbackContext):
 async def rent_select_account(update: Update, context: CallbackContext):
     query = update.callback_query
     data = query.data
-    await query.answer()  # ПО ВСЕМУ callback нужно отвечать всегда!
+    await query.answer()
     if not data.startswith("rent_acc_"):
         return USER_RENT_SELECT_ACCOUNT
     acc_id = int(data.split("_")[-1])
     context.user_data['rent_acc_id'] = acc_id
     buttons = [
-        [InlineKeyboardButton("1 минута", callback_data="rent_dur_1")],
-        [InlineKeyboardButton("30 минут", callback_data="rent_dur_30")],
         [InlineKeyboardButton("60 минут", callback_data="rent_dur_60")],
         [InlineKeyboardButton("120 минут", callback_data="rent_dur_120")],
         [InlineKeyboardButton("3 часа", callback_data="rent_dur_180")],
@@ -458,7 +460,7 @@ async def rent_select_duration(update: Update, context: CallbackContext):
             return ConversationHandler.END
         acc.status = "rented"
         acc.renter_id = user_id
-        acc.rented_at = datetime.now()
+        acc.rented_at = datetime.now(tz)
         acc.rent_duration = duration
         session.commit()
         await query.edit_message_text(
@@ -896,6 +898,16 @@ async def admin_edit_cancel(update: Update, context: CallbackContext):
 
     return ConversationHandler.END
 
+async def admin_delete_cancel(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+
+    if update.message:
+        await update.message.reply_text("Удаление аккаунта отменено.", reply_markup=main_menu_keyboard(user_id))
+    elif update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text("Удаление аккаунта отменено.", reply_markup=main_menu_keyboard(user_id))
+
+    return ConversationHandler.END
 
 async def admin_delete_start(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
@@ -1041,9 +1053,15 @@ def main():
     delete_acc_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_delete_start, pattern="^admin_delete_start$")],
         states={
-            ADMIN_DELETE_CHOOSE_ID: [CallbackQueryHandler(admin_delete_choose_account, pattern="^delete_acc_\\d+$")]
+            ADMIN_DELETE_CHOOSE_ID: [
+                CallbackQueryHandler(admin_delete_choose_account, pattern="^delete_acc_\\d+$")
+            ]
         },
-        fallbacks=[CallbackQueryHandler(admin_edit_cancel, pattern="^admin_back$")],
+        fallbacks=[
+            CommandHandler('cancel', admin_delete_cancel),
+            CallbackQueryHandler(admin_delete_cancel, pattern="^admin_back$"),
+        ],
+        allow_reentry=True
     )
     app.add_handler(delete_acc_conv)
     app.add_handler(CallbackQueryHandler(show_all_users_handler, pattern="^show_all_users$"))
