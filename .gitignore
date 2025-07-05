@@ -1,2 +1,33 @@
+# Файлы виртуального окружения
+venv/
 .env
+.env.*
+
+# Файлы с секретами и конфигами
+*.env
+config.ini
+secrets.json
 test_server_ping.py
+
+# Файлы кэша Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Логи
+*.log
+
+# Файлы базы данных SQLite (если есть)
+*.db
+*.sqlite3
+
+# IDE и редакторы
+.vscode/
+.idea/
+*.iml
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
