@@ -203,7 +203,7 @@ async def start(update: Update, context: CallbackContext):
                 first_name=user.first_name,
                 last_name=user.last_name,
                 is_approved=is_approved,
-                registered_at=datetime.now()
+                registered_at=datetime.utcnow()
             )
             session.add(new_user)
             session.commit()
@@ -957,7 +957,7 @@ async def admin_delete_choose_account(update: Update, context: CallbackContext):
 def auto_return_accounts():
     session = Session()
     try:
-        now = datetime.now()
+        now = datetime.utcnow()
         rented = session.query(Account).filter(Account.status == "rented").all()
         for acc in rented:
             if acc.rented_at and acc.rent_duration:
