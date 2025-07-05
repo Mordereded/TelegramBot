@@ -102,8 +102,15 @@ Base.metadata.create_all(engine)
 def is_admin(user_id):
     return user_id in ADMIN_IDS
 
-def format_datetime(dt):
-    return dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "—"
+def format_datetime(dt, tz_name="Europe/Moscow"):
+    if not dt:
+        return "—"
+    try:
+        local_tz = timezone(tz_name)
+        localized_dt = dt.astimezone(local_tz)
+        return localized_dt.strftime("%d.%m.%Y %H:%M")
+    except Exception as e:
+        return "Неверная дата"
 
 
 async def show_registration_error(update: Update, message: str):
