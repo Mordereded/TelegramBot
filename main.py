@@ -1096,7 +1096,7 @@ def main():
             ADMIN_ADD_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_login_handler)],
             ADMIN_ADD_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_password_handler)],
             ADMIN_ADD_BEHAVIOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_behavior_handler)],
-            ADMIN_ADD_CALIBRATION: [CallbackQueryHandler(admin_add_calibration_handler, pattern="^calibrationn_(yes|no)$")],
+            ADMIN_ADD_CALIBRATION: [CallbackQueryHandler(admin_add_calibration_handler, pattern="^calibration_(yes|no)$")],
             ADMIN_ADD_MMR: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_mmr_handler)],
         },
         fallbacks=[CommandHandler("cancel", admin_add_cancel)],
