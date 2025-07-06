@@ -82,7 +82,7 @@ class User(Base):
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     is_approved = Column(Boolean, default=False)
-    registered_at = Column(DateTime, default=datetime.now(tz))
+    registered_at = Column(DateTime, default=datetime.utcnow())
 
 Base.metadata.create_all(engine)
 
@@ -468,7 +468,7 @@ async def rent_select_duration(update: Update, context: CallbackContext):
             return ConversationHandler.END
         acc.status = "rented"
         acc.renter_id = user_id
-        acc.rented_at = datetime.now(tz)
+        acc.rented_at = datetime.utcnow()
         acc.rent_duration = duration
         session.commit()
         await query.edit_message_text(
