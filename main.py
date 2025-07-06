@@ -13,8 +13,7 @@ from telegram import ReplyKeyboardRemove
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from apscheduler.schedulers.background import BackgroundScheduler
-from datetime import datetime, timedelta
-from pytz import timezone
+from datetime import datetime, timedelta, timezone
 import logging
 import sys
 
@@ -82,7 +81,7 @@ class User(Base):
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     is_approved = Column(Boolean, default=False)
-    registered_at = Column(DateTime, default=datetime.utcnow())
+    registered_at = Column(DateTime, default=datetime.now(timezone.utc))
 
 Base.metadata.create_all(engine)
 
@@ -210,7 +209,7 @@ async def start(update: Update, context: CallbackContext):
                 first_name=user.first_name,
                 last_name=user.last_name,
                 is_approved=is_approved,
-                registered_at=datetime.utcnow()
+                registered_at=datetime.now(timezone.utc)
             )
             session.add(new_user)
             session.commit()
@@ -468,7 +467,7 @@ async def rent_select_duration(update: Update, context: CallbackContext):
             return ConversationHandler.END
         acc.status = "rented"
         acc.renter_id = user_id
-        acc.rented_at = datetime.utcnow()
+        acc.rented_at = datetime.now(timezone.utc)
         acc.rent_duration = duration
         session.commit()
         await query.edit_message_text(
@@ -965,7 +964,7 @@ async def admin_delete_choose_account(update: Update, context: CallbackContext):
 def auto_return_accounts():
     session = Session()
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rented = session.query(Account).filter(Account.status == "rented").all()
         for acc in rented:
             if acc.rented_at and acc.rent_duration:
