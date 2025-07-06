@@ -980,7 +980,11 @@ def auto_return_accounts():
         rented = session.query(Account).filter(Account.status == "rented").all()
         for acc in rented:
             if acc.rented_at and acc.rent_duration:
-                end_time = acc.rented_at + timedelta(minutes=acc.rent_duration)
+                rented_at = acc.rented_at
+                if rented_at.tzinfo is None:
+                    rented_at = rented_at.replace(tzinfo=timezone.utc)
+
+                end_time = rented_at + timedelta(minutes=acc.rent_duration)
                 if now >= end_time:
                     acc.status = "free"
                     acc.renter_id = None
@@ -989,7 +993,7 @@ def auto_return_accounts():
                     logging.info(f"Автоматический возврат аккаунта ID {acc.id}")
         session.commit()
     except Exception as e:
-        logging.error(f"Ошибка автоматического возврата аккаунтов: {e}")
+        logging.error(f"Ошибка автоматического возврата аккаунтов: {e}", exc_info=True)
     finally:
         session.close()
 
