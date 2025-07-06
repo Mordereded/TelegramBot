@@ -920,8 +920,29 @@ async def admin_edit_choose_field(update: Update, context: CallbackContext):
     data = query.data
     field = data.replace("edit_field_", "")
     context.user_data['edit_field'] = field
-    await query.edit_message_text(f"Введите новое значение для поля '{field}':")
+    await query.edit_message_text(f"Введите новое значение для {get_field_display_name(field)}:")
     return ADMIN_EDIT_NEW_VALUE
+
+def get_field_display_name(field_name: str) -> str:
+    field_map = {
+        "id": "ID",
+        "login": "Логин",
+        "password": "Пароль",
+        "mmr": "MMR",
+        "behavior": "Рейтинг поведение",
+        "status": "Статус",
+        "rented_at": "Время аренды",
+        "renter_id": "ID арендатора",
+        "rent_duration": "Длительность аренды (мин)",
+        "calibration": "Откалиброван",
+        "telegram_id": "Telegram ID",
+        "username": "Имя пользователя",
+        "first_name": "Имя",
+        "last_name": "Фамилия",
+        "is_approved": "Подтверждён",
+        "registered_at": "Дата регистрации",
+    }
+    return field_map.get(field_name, field_name)
 
 async def admin_edit_new_value(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
@@ -937,7 +958,7 @@ async def admin_edit_new_value(update: Update, context: CallbackContext):
         # Валидация MMR
         if field == "mmr" or field == "behavior":
             if not value.isdigit():
-                await update.message.reply_text(f"{field} должно быть числом. Попробуйте снова:")
+                await update.message.reply_text(f"{get_field_display_name(field)} должно быть числом. Попробуйте снова:")
                 return ADMIN_EDIT_NEW_VALUE
             setattr(acc, field, int(value))
 
