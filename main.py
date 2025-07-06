@@ -43,8 +43,6 @@ ADMIN_IDS = set()
 if os.getenv("ADMIN_IDS"):
     ADMIN_IDS = set(map(int, filter(None, os.getenv("ADMIN_IDS").split(","))))
 
-
-tz = timezone("Europe/Moscow")
 Base = declarative_base()
 DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
