@@ -10,7 +10,7 @@ from telegram.ext import (
     CallbackQueryHandler
 )
 from telegram import ReplyKeyboardRemove
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, create_engine
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, create_engine, BigInteger
 from sqlalchemy.orm import declarative_base, sessionmaker
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta, timezone
@@ -62,11 +62,12 @@ logging.basicConfig(
 # --- Модели ---
 class Account(Base):
     __tablename__ = 'accounts'
-    id = Column(Integer, primary_key=True)
+    id = Column(BigInteger, primary_key=True)
     login = Column(String)
     password = Column(String)
     behavior = Column(Integer)
     mmr = Column(Integer)
+    calibration = Column(Boolean,default=False)
     status = Column(String)  # free or rented
     rented_at = Column(DateTime, nullable=True)
     renter_id = Column(Integer, nullable=True)
@@ -74,7 +75,7 @@ class Account(Base):
 
 class User(Base):
     __tablename__ = 'users'
-    telegram_id = Column(Integer, primary_key=True)
+    telegram_id = Column(BigInteger, primary_key=True)
     username = Column(String, nullable=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
@@ -84,10 +85,10 @@ class User(Base):
 Base.metadata.create_all(engine)
 
 # --- Состояния для ConversationHandler ---
-(ADMIN_ADD_LOGIN, ADMIN_ADD_PASSWORD, ADMIN_ADD_MMR,
+(ADMIN_ADD_LOGIN, ADMIN_ADD_PASSWORD, ADMIN_ADD_MMR,ADMIN_ADD_CALIBRATION,
  ADMIN_EDIT_CHOOSE_ID, ADMIN_EDIT_CHOOSE_FIELD, ADMIN_EDIT_NEW_VALUE,
  USER_RENT_SELECT_ACCOUNT, USER_RENT_SELECT_DURATION,
- ADMIN_DELETE_CHOOSE_ID,ADMIN_ADD_BEHAVIOR) = range(10)
+ ADMIN_DELETE_CHOOSE_ID,ADMIN_ADD_BEHAVIOR) = range(11)
 (
     RETURN_CONFIRM_UPDATE,
     RETURN_SELECT_FIELDS,
@@ -101,10 +102,7 @@ def is_admin(user_id):
 
 
 MOSCOW_TZ = timezone(timedelta(hours=3))  # Московское время UTC+3
-
-
 def format_datetime(dt):
-
     if not dt:
         return "—"
     try:
@@ -264,14 +262,28 @@ async def list_accounts(update: Update, context: CallbackContext):
                         f"Вернуть до: {format_datetime(rent_end)}\n"
                         f"Арендатор Telegram ID: {acc.renter_id or '—'}\n"
                     )
+                calibrated_str = "Да" if acc.calibration else "Нет"
                 text += (
-                    f"ID: {acc.id}\nMMR: {acc.mmr}\nBehavior: {acc.behavior or '—'}\nСтатус: {acc.status}\n"
-                    f"Логин: {acc.login}\nПароль: {acc.password}\n{rent_info}\n"
+                    f"ID: {acc.id}\n"
+                    f"Калибровка: {calibrated_str}\n"
+                    f"MMR: {acc.mmr}\n"
+                    f"Behavior: {acc.behavior or '—'}\n"
+                    f"Статус: {acc.status}\n"
+                    f"Логин: {acc.login}\n"
+                    f"Пароль: {acc.password}\n"
+                    f"{rent_info}\n"
                 )
         else:
             for acc in accounts:
                 status = "✅ Свободен" if acc.status == "free" else "⛔ Арендован"
-                text += f"ID: {acc.id}\nMMR: {acc.mmr}\nBehavior: {acc.behavior or '—'} \nСтатус: {status}\n\n"
+                calibrated_str = "Да" if acc.calibration else "Нет"
+                text += (
+                    f"ID: {acc.id}\n"
+                    f"MMR: {acc.mmr}\n"
+                    f"Behavior: {acc.behavior or '—'}\n"
+                    f"Калибровка: {calibrated_str}\n"
+                    f"Статус: {status}\n\n"
+                )
 
         if not text:
             text = "Нет аккаунтов."
@@ -321,8 +333,13 @@ async def my(update: Update, context: CallbackContext):
             for acc in accounts:
                 rent_end = acc.rented_at + timedelta(minutes=acc.rent_duration) if acc.rented_at and acc.rent_duration else None
                 duration_str = format_duration(acc.rent_duration) if acc.rent_duration else "—"
+                calibrated_str = "Да" if acc.calibration else "Нет"
                 text += (
-                    f"ID: {acc.id}\nMMR: {acc.mmr}\nBehavior: {acc.behavior or '—'}\nСтатус: аренда\n"
+                    f"ID: {acc.id}\n"
+                    f"Калибровка: {calibrated_str}\n"
+                    f"MMR: {acc.mmr}\n"
+                    f"Behavior: {acc.behavior or '—'}\n"
+                    f"Статус: аренда\n"
                     f"Логин: {acc.login}\nПароль: {acc.password}\n"
                     f"Взято: {format_datetime(acc.rented_at)}\n"
                     f"Длительность: {duration_str}\n"
@@ -801,8 +818,30 @@ async def admin_add_behavior_handler(update: Update, context: CallbackContext):
     if not behavior_text.isdigit():
         await update.message.reply_text("Behavior должен быть числом. Попробуйте снова:")
         return ADMIN_ADD_BEHAVIOR
+
     context.user_data['new_behavior'] = int(behavior_text)
-    await update.message.reply_text("Введите MMR аккаунта (число):")
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Да", callback_data="calibration_yes"),
+         InlineKeyboardButton("❌ Нет", callback_data="calibration_no")]
+    ])
+
+    await update.message.reply_text("Аккаунт откалиброван?", reply_markup=keyboard)
+    return ADMIN_ADD_CALIBRATION
+
+async def admin_add_calibration_handler(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "calibration_yes":
+        context.user_data['new_calibration'] = True
+    elif query.data == "calibration_no":
+        context.user_data['new_calibration'] = False
+    else:
+        await query.edit_message_text("Неверный выбор. Попробуйте ещё раз.")
+        return ADMIN_ADD_CALIBRATION
+
+    await query.edit_message_text("Введите MMR аккаунта (число):")
     return ADMIN_ADD_MMR
 
 async def admin_add_mmr_handler(update: Update, context: CallbackContext):
@@ -818,6 +857,7 @@ async def admin_add_mmr_handler(update: Update, context: CallbackContext):
             password=context.user_data['new_password'],
             behavior=context.user_data['new_behavior'],
             mmr=mmr,
+            calibration= context.user_data['new_calibration'],
             status="free",
             rented_at=None,
             renter_id=None,
@@ -867,6 +907,7 @@ async def admin_edit_choose_id(update: Update, context: CallbackContext):
         [InlineKeyboardButton("Пароль", callback_data="edit_field_password")],
         [InlineKeyboardButton("MMR", callback_data="edit_field_mmr")],
         [InlineKeyboardButton("Behavior", callback_data="edit_field_behavior")],
+        [InlineKeyboardButton("Калибровка", callback_data="edit_field_calibration")],
         [InlineKeyboardButton("Отмена", callback_data="admin_back")]
     ]
     await query.edit_message_text("Выберите поле для редактирования:", reply_markup=InlineKeyboardMarkup(buttons))
@@ -892,11 +933,20 @@ async def admin_edit_new_value(update: Update, context: CallbackContext):
             await update.message.reply_text("Аккаунт не найден.", reply_markup=main_menu_keyboard(user_id))
             return ConversationHandler.END
         # Валидация MMR
-        if field == "mmr" or field == 'behavior':
+        if field == "mmr" or field == "behavior":
             if not value.isdigit():
                 await update.message.reply_text(f"{field} должно быть числом. Попробуйте снова:")
                 return ADMIN_EDIT_NEW_VALUE
             setattr(acc, field, int(value))
+
+        elif field == "calibration":
+            if value.lower() in ["да", "yes", "true", "1"]:
+                acc.calibration = True
+            elif value.lower() in ["нет", "no", "false", "0"]:
+                acc.calibration = False
+            else:
+                await update.message.reply_text("Введите 'да' или 'нет' для калибровки:")
+                return ADMIN_EDIT_NEW_VALUE
         else:
             setattr(acc, field, value)
         session.commit()
@@ -1044,9 +1094,10 @@ def main():
             ADMIN_ADD_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_login_handler)],
             ADMIN_ADD_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_password_handler)],
             ADMIN_ADD_BEHAVIOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_behavior_handler)],
+            ADMIN_ADD_CALIBRATION: [CallbackQueryHandler(admin_add_calibration_handler, pattern="^calibrationn_(yes|no)$")],
             ADMIN_ADD_MMR: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_mmr_handler)],
         },
-        fallbacks=[CommandHandler('cancel', admin_add_cancel)]
+        fallbacks=[CommandHandler("cancel", admin_add_cancel)],
     )
     app.add_handler(add_acc_conv)
 
