@@ -1100,6 +1100,7 @@ def main():
             ADMIN_ADD_MMR: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_mmr_handler)],
         },
         fallbacks=[CommandHandler("cancel", admin_add_cancel)],
+        allow_reentry=True
     )
     app.add_handler(add_acc_conv)
 
