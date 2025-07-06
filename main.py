@@ -434,6 +434,7 @@ async def rent_select_account(update: Update, context: CallbackContext):
     acc_id = int(data.split("_")[-1])
     context.user_data['rent_acc_id'] = acc_id
     buttons = [
+        [InlineKeyboardButton("1 минут", callback_data="rent_dur_1")],
         [InlineKeyboardButton("60 минут", callback_data="rent_dur_60")],
         [InlineKeyboardButton("120 минут", callback_data="rent_dur_120")],
         [InlineKeyboardButton("3 часа", callback_data="rent_dur_180")],
