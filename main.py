@@ -424,8 +424,10 @@ async def rent_start(update: Update, context: CallbackContext):
             return ConversationHandler.END
 
         buttons = [
-            [InlineKeyboardButton(f"ID {acc.id} MMR {acc.mmr}", callback_data=f"rent_acc_{acc.id}")]
+
+            [InlineKeyboardButton(f"ID: {acc.id} MMR: {acc.mmr} Откалиброван: {'Да' if acc.calibration == 1 else 'Нет'}", callback_data=f"rent_acc_{acc.id}")]
             for acc in free_accs
+
         ]
         # Кнопка отмены — callback_data "cancel_rent", чтобы ловилась fallbacks
         buttons.append([InlineKeyboardButton("Отмена", callback_data="cancel_rent")])
