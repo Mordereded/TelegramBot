@@ -99,15 +99,29 @@ Base.metadata.create_all(engine)
 def is_admin(user_id):
     return user_id in ADMIN_IDS
 
-def format_datetime(dt, tz_name="Europe/Moscow"):
+
+MOSCOW_TZ = timezone(timedelta(hours=3))  # Московское время UTC+3
+
+
+def format_datetime(dt):
+
     if not dt:
         return "—"
     try:
-        local_tz = timezone(tz_name)
-        localized_dt = dt.astimezone(local_tz)
-        return localized_dt.strftime("%d.%m.%Y %H:%M")
+        # Если datetime наивный — считаем его UTC
+        if dt.tzinfo is None:
+            logging.debug("Datetime наивный, добавляем UTC")
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            logging.debug(f"Datetime уже с таймзоной: {dt.tzinfo}")
+
+        # Переводим время в московскую зону
+        localized_dt = dt.astimezone(MOSCOW_TZ)
+        formatted = localized_dt.strftime("%d.%m.%Y %H:%M")
+        return formatted
     except Exception as e:
-        return "Неверная дата"
+
+        return f"Неверная дата: {e}"
 
 
 async def show_registration_error(update: Update, message: str):
