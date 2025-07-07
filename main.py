@@ -265,7 +265,7 @@ async def list_accounts(update: Update, context: CallbackContext):
                 calibrated_str = "Да" if acc.calibration else "Нет"
                 text += (
                     f"ID: {acc.id}\n"
-                    f"Калибровка: {calibrated_str}\n"
+                    f"Откалиброван: {calibrated_str}\n"
                     f"MMR: {acc.mmr}\n"
                     f"Behavior: {acc.behavior or '—'}\n"
                     f"Статус: {acc.status}\n"
@@ -281,7 +281,7 @@ async def list_accounts(update: Update, context: CallbackContext):
                     f"ID: {acc.id}\n"
                     f"MMR: {acc.mmr}\n"
                     f"Behavior: {acc.behavior or '—'}\n"
-                    f"Калибровка: {calibrated_str}\n"
+                    f"Откалиброван: {calibrated_str}\n"
                     f"Статус: {status}\n\n"
                 )
 
@@ -336,7 +336,7 @@ async def my(update: Update, context: CallbackContext):
                 calibrated_str = "Да" if acc.calibration else "Нет"
                 text += (
                     f"ID: {acc.id}\n"
-                    f"Калибровка: {calibrated_str}\n"
+                    f"Откалиброван: {calibrated_str}\n"
                     f"MMR: {acc.mmr}\n"
                     f"Behavior: {acc.behavior or '—'}\n"
                     f"Статус: аренда\n"
@@ -425,7 +425,7 @@ async def rent_start(update: Update, context: CallbackContext):
 
         buttons = [
 
-            [InlineKeyboardButton(f"ID: {acc.id} MMR: {acc.mmr} Откалиброван: {'Да' if acc.calibration == 1 else 'Нет'}", callback_data=f"rent_acc_{acc.id}")]
+            [InlineKeyboardButton(f"MMR: {acc.mmr} Откалиброван: {'Да' if acc.calibration == 1 else 'Нет'} Порядочность: {acc.behavior}", callback_data=f"rent_acc_{acc.id}")]
             for acc in free_accs
 
         ]
