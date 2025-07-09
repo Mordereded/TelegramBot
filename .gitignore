@@ -8,6 +8,7 @@ venv/
 config.ini
 secrets.json
 test_server_ping.py
+testAPI.py
 
 # Файлы кэша Python
 __pycache__/
