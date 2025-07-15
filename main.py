@@ -1104,10 +1104,10 @@ def main():
         entry_points=[CallbackQueryHandler(rent_start, pattern="^rent_start$")],
         states={
             USER_RENT_SELECT_ACCOUNT: [CallbackQueryHandler(rent_select_account, pattern="^rent_acc_\\d+$")],
-            USER_RENT_SELECT_DURATION: [
-                CallbackQueryHandler(rent_select_duration, pattern="^rent_dur_\\d+$|^cancel_rent$")],
+            USER_RENT_SELECT_DURATION: [CallbackQueryHandler(rent_select_duration, pattern="^rent_dur_\\d+$|^cancel_rent$")],
         },
-        fallbacks=[CallbackQueryHandler(cancel_rent, pattern="^cancel_rent$")]
+        fallbacks=[CallbackQueryHandler(cancel_rent, pattern="^cancel_rent$")],
+        allow_reentry=True
     )
     app.add_handler(rent_conv)
 
