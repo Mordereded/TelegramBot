@@ -1,5 +1,22 @@
-import os
-from dotenv import load_dotenv
+
+import asyncio
+
+from sqlalchemy import except_, desc
+
+from States import (
+    ADMIN_ADD_LOGIN, ADMIN_ADD_PASSWORD, ADMIN_ADD_MMR,
+    ADMIN_ADD_CALIBRATION, ADMIN_EDIT_CHOOSE_ID, ADMIN_EDIT_CHOOSE_FIELD,
+    ADMIN_EDIT_NEW_VALUE, USER_RENT_SELECT_ACCOUNT, USER_RENT_SELECT_DURATION,
+    ADMIN_DELETE_CHOOSE_ID, ADMIN_ADD_BEHAVIOR, ADMIN_EDIT_EMAIL_CHOOSE_FIELD,
+    RETURN_CONFIRM_UPDATE, RETURN_SELECT_FIELDS, RETURN_INPUT_MMR,
+    RETURN_INPUT_BEHAVIOR,WAIT_FOR_EMAIL_CODE,WAIT_FOR_2FA_CONFIRM,
+    ADMIN_ADD_2FA_ASK,ADMIN_ADD_EMAIL,ADMIN_ADD_EMAIL_PASSWORD,
+)
+from getCodeFromMail import FirstMailCodeReader
+
+from models import Account, User, AccountLog, Email
+from config import TOKEN, Session, scheduler, ADMIN_IDS
+from utils import is_admin, format_datetime
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup
 )
@@ -10,116 +27,8 @@ from telegram.ext import (
     CallbackQueryHandler
 )
 from telegram import ReplyKeyboardRemove
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, create_engine, BigInteger
-from sqlalchemy.orm import declarative_base, sessionmaker
-from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta, timezone
 import logging
-import sys
-
-
-from flask import Flask, Response
-import threading
-
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
-def home():
-    return Response("OK", status=200)
-
-def run_flask():
-    port = int(os.environ.get("PORT", 8000))
-    flask_app.run(host="0.0.0.0", port=port)
-
-
-# --- Загрузка переменных окружения ---
-load_dotenv()
-TOKEN = os.getenv("BOT_TOKEN")
-if not TOKEN:
-    print("Ошибка: в файле .env не найден BOT_TOKEN")
-    sys.exit(1)
-
-ADMIN_IDS = set()
-if os.getenv("ADMIN_IDS"):
-    ADMIN_IDS = set(map(int, filter(None, os.getenv("ADMIN_IDS").split(","))))
-
-Base = declarative_base()
-DATABASE_URL = os.getenv("DATABASE_URL")
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine)
-scheduler = BackgroundScheduler()
-scheduler.start()
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.FileHandler("bot.log", encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
-# --- Модели ---
-class Account(Base):
-    __tablename__ = 'accounts'
-    id = Column(BigInteger, primary_key=True)
-    login = Column(String)
-    password = Column(String)
-    behavior = Column(Integer)
-    mmr = Column(Integer)
-    calibration = Column(Boolean,default=False)
-    status = Column(String)  # free or rented
-    rented_at = Column(DateTime, nullable=True)
-    renter_id = Column(Integer, nullable=True)
-    rent_duration = Column(Integer, nullable=True)
-
-class User(Base):
-    __tablename__ = 'users'
-    telegram_id = Column(BigInteger, primary_key=True)
-    username = Column(String, nullable=True)
-    first_name = Column(String, nullable=True)
-    last_name = Column(String, nullable=True)
-    is_approved = Column(Boolean, default=False)
-    registered_at = Column(DateTime, default=datetime.now(timezone.utc))
-
-Base.metadata.create_all(engine)
-
-# --- Состояния для ConversationHandler ---
-(ADMIN_ADD_LOGIN, ADMIN_ADD_PASSWORD, ADMIN_ADD_MMR,ADMIN_ADD_CALIBRATION,
- ADMIN_EDIT_CHOOSE_ID, ADMIN_EDIT_CHOOSE_FIELD, ADMIN_EDIT_NEW_VALUE,
- USER_RENT_SELECT_ACCOUNT, USER_RENT_SELECT_DURATION,
- ADMIN_DELETE_CHOOSE_ID,ADMIN_ADD_BEHAVIOR) = range(11)
-(
-    RETURN_CONFIRM_UPDATE,
-    RETURN_SELECT_FIELDS,
-    RETURN_INPUT_MMR,
-    RETURN_INPUT_BEHAVIOR
-) = range(200, 204)
-
-# --- Вспомогательные функции ---
-def is_admin(user_id):
-    return user_id in ADMIN_IDS
-
-
-MOSCOW_TZ = timezone(timedelta(hours=3))  # Московское время UTC+3
-def format_datetime(dt):
-    if not dt:
-        return "—"
-    try:
-        # Если datetime наивный — считаем его UTC
-        if dt.tzinfo is None:
-            logging.debug("Datetime наивный, добавляем UTC")
-            dt = dt.replace(tzinfo=timezone.utc)
-        else:
-            logging.debug(f"Datetime уже с таймзоной: {dt.tzinfo}")
-
-        # Переводим время в московскую зону
-        localized_dt = dt.astimezone(MOSCOW_TZ)
-        formatted = localized_dt.strftime("%d.%m.%Y %H:%M")
-        return formatted
-    except Exception as e:
-
-        return f"Неверная дата: {e}"
 
 
 async def show_registration_error(update: Update, message: str):
@@ -243,53 +152,69 @@ async def list_accounts(update: Update, context: CallbackContext):
     try:
         user_obj = session.query(User).filter_by(telegram_id=user_id).first()
         if not user_obj:
-            return await show_registration_error(update, "Вы не зарегистрированы.")
+            return await show_registration_error(update, "❌ Вы не зарегистрированы.")
         if not user_obj.is_approved:
-            return await show_registration_error(update, "Ваш аккаунт ещё не подтверждён админом.")
+            return await show_registration_error(update, "⏳ Ваш аккаунт ещё не подтверждён админом.")
 
-        accounts = session.query(Account).all()
+        accounts = session.query(Account).order_by(desc(Account.mmr)).all()
         text = ""
 
         if is_admin(user_id):
+            text = "🛠 *Все аккаунты (админ):*\n\n"
             for acc in accounts:
+                email_obj = session.query(Email).filter_by(accountfk=acc.id).first()
+                email_info = ""
+                if email_obj:
+                    email_info = (
+                        f"📧 *Почта:* `{email_obj.login}`\n"
+                        f"🔑 *Пароль почты:* `{email_obj.password}`\n"
+                        f"🛡 *2FA:* Да\n"
+                    )
+
                 rent_info = ""
                 if acc.status == "rented" and acc.rented_at and acc.rent_duration:
                     rent_end = acc.rented_at + timedelta(minutes=acc.rent_duration)
                     duration_str = format_duration(acc.rent_duration)
                     rent_info = (
-                        f"Взято: {format_datetime(acc.rented_at)}\n"
-                        f"Длительность: {duration_str}\n"
-                        f"Вернуть до: {format_datetime(rent_end)}\n"
-                        f"Арендатор Telegram ID: {acc.renter_id or '—'}\n"
+                        f"⏰ *Взято:* {format_datetime(acc.rented_at)}\n"
+                        f"⏳ *Длительность аренды:* {duration_str}\n"
+                        f"📅 *Вернуть до:* {format_datetime(rent_end)}\n"
+                        f"👤 *Арендатор Telegram ID:* `{acc.renter_id or '—'}`\n"
                     )
-                calibrated_str = "Да" if acc.calibration else "Нет"
+                calibrated_str = "✅ Да" if acc.calibration else "❌ Нет"
+
                 text += (
-                    f"ID: {acc.id}\n"
-                    f"Откалиброван: {calibrated_str}\n"
-                    f"MMR: {acc.mmr}\n"
-                    f"Behavior: {acc.behavior or '—'}\n"
-                    f"Статус: {acc.status}\n"
-                    f"Логин: {acc.login}\n"
-                    f"Пароль: {acc.password}\n"
-                    f"{rent_info}\n"
+                    f"🆔 *ID:* `{acc.id}`\n"
+                    f"🎯 *Откалиброван:* {calibrated_str}\n"
+                    f"📈 *MMR:* {acc.mmr}\n"
+                    f"🧠 *Поведение:* {acc.behavior or '—'}\n"
+                    f"🔒 *Статус:* {acc.status.capitalize()}\n"
+                    f"👤 *Логин аккаунта:* `{acc.login}`\n"
+                    f"🔐 *Пароль аккаунта:* `{acc.password}`\n"
+                    f"{email_info}"
+                    f"{rent_info}"
+                    + ("─" * 30) + "\n\n"
                 )
         else:
+            text = "🎮 *Доступные аккаунты:*\n\n"
             for acc in accounts:
-                status = "✅ Свободен" if acc.status == "free" else "⛔ Арендован"
-                calibrated_str = "Да" if acc.calibration else "Нет"
+                status_emoji = "✅" if acc.status == "free" else "⛔"
+                calibrated_str = "✅ Да" if acc.calibration else "❌ Нет"
+
                 text += (
-                    f"ID: {acc.id}\n"
-                    f"MMR: {acc.mmr}\n"
-                    f"Behavior: {acc.behavior or '—'}\n"
-                    f"Откалиброван: {calibrated_str}\n"
-                    f"Статус: {status}\n\n"
+                    f"🆔 *ID:* `{acc.id}`\n"
+                    f"📈 *MMR:* {acc.mmr}\n"
+                    f"🧠 *Поведение:* {acc.behavior or '—'}\n"
+                    f"🎯 *Откалиброван:* {calibrated_str}\n"
+                    f"🔒 *Статус:* {status_emoji} {acc.status.capitalize()}\n"
+                    + ("─" * 25) + "\n\n"
                 )
 
-        if not text:
-            text = "Нет аккаунтов."
+        if not text.strip():
+            text = "❌ Нет аккаунтов."
 
         if update.message:
-            await update.message.reply_text(text, reply_markup=main_menu_keyboard(user_id))
+            await update.message.reply_text(text, reply_markup=main_menu_keyboard(user_id), parse_mode="Markdown")
         elif update.callback_query:
             current_text = update.callback_query.message.text or ""
             current_markup = update.callback_query.message.reply_markup
@@ -300,20 +225,17 @@ async def list_accounts(update: Update, context: CallbackContext):
                     return True
                 if m1 is None or m2 is None:
                     return False
-                # Сравним структуру inline_keyboard (список списков кнопок)
                 kb1 = getattr(m1, 'inline_keyboard', None)
                 kb2 = getattr(m2, 'inline_keyboard', None)
                 return kb1 == kb2
 
             if current_text == text and markup_equals(current_markup, new_markup):
-                await update.callback_query.answer()  # просто "погасить" спиннер
+                await update.callback_query.answer()  # "погасить" спиннер
                 return
             else:
-                await update.callback_query.edit_message_text(text, reply_markup=new_markup)
+                await update.callback_query.edit_message_text(text, reply_markup=new_markup, parse_mode="Markdown")
     finally:
         session.close()
-
-
 
 
 async def my(update: Update, context: CallbackContext):
@@ -321,43 +243,58 @@ async def my(update: Update, context: CallbackContext):
     session = Session()
     try:
         user_obj = session.query(User).filter_by(telegram_id=user_id).first()
-
         if not user_obj:
-            return await show_registration_error(update, "Вы не зарегистрированы.")
+            return await show_registration_error(update, "❌ Вы не зарегистрированы.")
         if not user_obj.is_approved:
-            return await show_registration_error(update, "Ваш аккаунт ещё не подтверждён админом.")
+            return await show_registration_error(update, "⏳ Ваш аккаунт ещё не подтверждён админом.")
 
         accounts = session.query(Account).filter_by(renter_id=user_id, status="rented").all()
         if accounts:
-            text = "Ваши арендованные аккаунты:\n\n"
+            text = "📋 *Ваши арендованные аккаунты:*\n\n"
             for acc in accounts:
                 rent_end = acc.rented_at + timedelta(minutes=acc.rent_duration) if acc.rented_at and acc.rent_duration else None
                 duration_str = format_duration(acc.rent_duration) if acc.rent_duration else "—"
-                calibrated_str = "Да" if acc.calibration else "Нет"
-                text += (
-                    f"ID: {acc.id}\n"
-                    f"Откалиброван: {calibrated_str}\n"
-                    f"MMR: {acc.mmr}\n"
-                    f"Behavior: {acc.behavior or '—'}\n"
-                    f"Статус: аренда\n"
-                    f"Логин: {acc.login}\nПароль: {acc.password}\n"
-                    f"Взято: {format_datetime(acc.rented_at)}\n"
-                    f"Длительность: {duration_str}\n"
-                    f"Вернуть до: {format_datetime(rent_end)}\n\n"
-                )
-                if user_id in ADMIN_IDS:
-                    text += f"Арендатор Telegram ID: {acc.renter_id}\n\n"
-        else:
-            text = "У вас нет арендованных аккаунтов."
+                rent_start_str = format_datetime(acc.rented_at) if acc.rented_at else "—"
+                rent_end_str = format_datetime(rent_end) if rent_end else "—"
+                calibrated_str = "✅ Да" if acc.calibration else "❌ Нет"
+                behavior_str = acc.behavior or "—"
 
+                # Получаем почту из связанной таблицы emails
+                email_obj = session.query(Email).filter_by(accountfk=acc.id).first()
+                email_info = ""
+                if email_obj and is_admin(user_id):
+                    email_info = (
+                        f"📧 *Почта:* `{email_obj.login}`\n"
+                        f"🔑 *Пароль почты:* `{email_obj.password}`\n"
+                        f"🛡 *2FA:* Да\n"
+                    )
+
+                text += (
+                    f"🆔 *ID:* `{acc.id}`\n"
+                    f"🎯 *Откалиброван:* {calibrated_str}\n"
+                    f"📈 *MMR:* {acc.mmr}\n"
+                    f"🧠 *Поведение:* {behavior_str}\n"
+                    f"🔑 *Логин аккаунта:* `{acc.login}`\n"
+                    f"🔒 *Пароль аккаунта:* `{acc.password}`\n"
+                    f"{email_info}"
+                    f"⏰ *Взято:* {rent_start_str}\n"
+                    f"⏳ *Длительность аренды:* {duration_str}\n"
+                    f"🕒 *Вернуть до:* {rent_end_str}\n"
+                )
+                if is_admin(user_id):
+                    text += f"👤 *Арендатор Telegram ID:* `{acc.renter_id}`\n"
+
+                text += "\n" + ("─" * 30) + "\n\n"
+        else:
+            text = "❌ У вас нет арендованных аккаунтов."
+
+        markup = main_menu_keyboard(user_id)
         if update.message:
-            await update.message.reply_text(text, reply_markup=main_menu_keyboard(user_id))
+            await update.message.reply_text(text, reply_markup=markup, parse_mode="Markdown")
         elif update.callback_query:
-            await update.callback_query.edit_message_text(text, reply_markup=main_menu_keyboard(user_id))
+            await update.callback_query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
     finally:
         session.close()
-
-
 
 
 async def whoami(update: Update, context: CallbackContext):
@@ -372,20 +309,25 @@ async def whoami(update: Update, context: CallbackContext):
             return await show_registration_error(update, "Ваш аккаунт ещё не подтверждён админом.")
 
         role = "Админ" if is_admin(user_id) else "Пользователь"
+        username = f"@{user_obj.username}" if user_obj.username else "(нет)"
+        first_name = user_obj.first_name if user_obj.first_name else "(нет)"
+        last_name = user_obj.last_name if user_obj.last_name else ""
+
         text = (
-            f"ID: {user_obj.telegram_id}\n"
-            f"Username: @{user_obj.username or '(нет)'}\n"
-            f"Имя: {user_obj.first_name or '(нет)'} {user_obj.last_name or ''}\n"
-            f"Подтверждён админом: Да\n"
-            f"Роль: {role}"
+            f"👤 *Информация о пользователе:*\n\n"
+            f"🆔 *ID:* `{user_obj.telegram_id}`\n"
+            f"🔗 *Username:* {username}\n"
+            f"📛 *Имя:* {first_name} {last_name}\n"
+            f"🎭 *Роль:* {role}"
         )
 
         if update.message:
-            await update.message.reply_text(text, reply_markup=main_menu_keyboard(user_id))
+            await update.message.reply_text(text, reply_markup=main_menu_keyboard(user_id), parse_mode="Markdown")
         elif update.callback_query:
-            await update.callback_query.edit_message_text(text, reply_markup=main_menu_keyboard(user_id))
+            await update.callback_query.edit_message_text(text, reply_markup=main_menu_keyboard(user_id), parse_mode="Markdown")
     finally:
         session.close()
+
 
 
 
@@ -474,6 +416,7 @@ async def rent_select_account(update: Update, context: CallbackContext):
     await query.edit_message_text("Выберите длительность аренды:", reply_markup=InlineKeyboardMarkup(buttons))
     return USER_RENT_SELECT_DURATION
 
+
 # --- Аренда: выбор длительности ---
 async def rent_select_duration(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -481,33 +424,207 @@ async def rent_select_duration(update: Update, context: CallbackContext):
     if not data.startswith("rent_dur_"):
         await query.answer()
         return USER_RENT_SELECT_DURATION
+
     duration = int(data.split("_")[-1])
     acc_id = context.user_data.get('rent_acc_id')
     user_id = query.from_user.id
+
     session = Session()
     try:
         acc = session.query(Account).filter_by(id=acc_id).first()
         if not acc or acc.status != "free":
             await query.answer("Аккаунт уже арендован.", show_alert=True)
             return ConversationHandler.END
-        # Проверка, нет ли у пользователя уже аренды
+
         already_rented = session.query(Account).filter_by(renter_id=user_id, status="rented").first()
         if already_rented:
-            await query.answer("У вас уже есть арендованный аккаунт. Сначала верните его.", show_alert=True)
+            await query.answer("У вас уже есть арендованный аккаунт.", show_alert=True)
             return ConversationHandler.END
+
+        email_entry = session.query(Email).filter_by(accountfk=acc.id).first()
+
+        # Сразу меняем статус и сохраняем
         acc.status = "rented"
         acc.renter_id = user_id
         acc.rented_at = datetime.now(timezone.utc)
         acc.rent_duration = duration
+
+
         session.commit()
-        await query.edit_message_text(
-            f"Аккаунт ID {acc.id} успешно арендован на {format_duration(duration)}.",
-            reply_markup=main_menu_keyboard(user_id)
-        )
-        logging.info(f"User {user_id} rented account {acc.id} for {duration} minutes.")
+
+        if email_entry:
+            # Сохраняем данные почты для дальнейшего ожидания кода
+            context.user_data["pending_rent"] = {
+                "acc_id": acc.id,
+                "duration": duration,
+                "email_login": email_entry.login,
+                "email_password": email_entry.password
+            }
+            context.user_data["code_wait_start"] = datetime.now(timezone.utc)
+
+            buttons = [
+                [InlineKeyboardButton("✅ Код требуется", callback_data="confirm_2fa_yes")],
+                [InlineKeyboardButton("❌ Код не требуется", callback_data="confirm_2fa_no")]
+            ]
+            await query.edit_message_text(
+                f"👤 Логин: `{acc.login}`\n"
+                f"🔐 Пароль: `{acc.password}`\n\n"
+                "📩 Требуется ли код Steam Guard для входа?\n"
+                "✏️ Пожалуйста, подтвердите.",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+            return WAIT_FOR_2FA_CONFIRM
+        else:
+            message_text = (
+                f"👤 Логин: `{acc.login}`\n🔐 Пароль: `{acc.password}`\n\n"
+                "⚠️ Для этого аккаунта не настроена двухфакторная аутентификация — код подтверждения не придёт.\n"
+                "✅ Аккаунт успешно арендован."
+            )
+            session.add(AccountLog(
+                user_id=user_id,
+                account_id=acc.id,
+                action='Арендован (без 2FA)',
+                action_date=acc.rented_at
+            ))
+            session.commit()
+            await query.edit_message_text(
+                message_text,
+                parse_mode="Markdown",
+                reply_markup=main_menu_keyboard(user_id)
+            )
+            return ConversationHandler.END
     finally:
         session.close()
+
+async def confirm_2fa_handler(update: Update, context: CallbackContext):
+    query = update.callback_query
+    data = query.data
+    session = Session()
+    try:
+        acc_id = context.user_data.get('rent_acc_id')
+        user_id = query.from_user.id
+        acc = session.query(Account).filter_by(id=acc_id).first()
+        if data == "confirm_2fa_yes":
+            await query.answer("Ожидаем код с почты...")
+            return await wait_for_code_and_confirm(update, context)
+
+        elif data == "confirm_2fa_no":
+            await query.answer("Аренда завершена без кода.")
+            session.add(AccountLog(
+                user_id=user_id,
+                account_id=acc_id,
+                action='Арендован (без 2FA)',
+                action_date=acc.rented_at
+            ))
+            session.commit()
+            context.user_data.clear()
+            await query.edit_message_text("Вы в главном меню.", reply_markup=main_menu_keyboard(user_id))
+            return ConversationHandler.END
+
+        else:
+            await query.answer()
+            return WAIT_FOR_2FA_CONFIRM
+    finally:
+        session.close()
+
+async def wait_for_code_and_confirm(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    data = context.user_data.get("pending_rent")
+    if not data:
+        await query.edit_message_text("Ошибка: неправильные данные.", reply_markup=main_menu_keyboard(user_id))
+        return ConversationHandler.END
+
+    acc_id = data["acc_id"]
+    email_login = data.get("email_login")
+    email_password = data.get("email_password")
+
+    if not email_login or not email_password:
+        await query.edit_message_text("Ошибка: получения кода с почты.", reply_markup=main_menu_keyboard(user_id))
+        return ConversationHandler.END
+
+    session = Session()
+    acc = session.query(Account).filter_by(id=acc_id).first()
+    session.close()
+    if not acc:
+        await query.edit_message_text("Ошибка: аккаунт не найден.", reply_markup=main_menu_keyboard(user_id))
+        return ConversationHandler.END
+
+    total_attempts = 30
+    wait_seconds = 10
+
+    cancel_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🚫 Отменить аренду", callback_data="cancel_rent")]
+    ])
+
+    reader = FirstMailCodeReader(email_login, email_password)
+
+    await query.edit_message_text(
+        f"👤 Логин: `{acc.login}`\n"
+        f"🔐 Пароль: `{acc.password}`\n\n"
+        f"📥 Начинаю поиск кода Steam Guard...\n"
+        f"⏳ Максимальное время ожидания: {total_attempts * wait_seconds // 60} мин.",
+        parse_mode="Markdown",
+        reply_markup=cancel_markup
+    )
+    await asyncio.sleep(2)
+    for attempt in range(total_attempts):
+        since_dt = context.user_data.get("code_wait_start")
+        if since_dt:
+            since_dt = since_dt - timedelta(minutes=5)
+
+        code = reader.fetch_latest_code(since_dt=since_dt)
+        if code:
+            # Обновляем статус аккаунта в базе
+            await query.edit_message_text(
+                f"✅ Аккаунт успешно арендован!\n"
+                f"👤 Логин: `{acc.login}`\n"
+                f"🔐 Пароль: `{acc.password}`\n\n"
+                f"📩 Код Steam: `{code}`\n"
+                f"🆔 Аккаунт ID: {acc.id}",
+                parse_mode="Markdown",
+                reply_markup=main_menu_keyboard(user_id)
+            )
+            session.add(AccountLog(
+                user_id=user_id,
+                account_id=acc.id,
+                action='Арендован (с 2FA)',
+                action_date=acc.rented_at
+            ))
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        else:
+
+            await query.edit_message_text(
+                f"👤 Логин: `{acc.login}`\n"
+                f"🔐 Пароль: `{acc.password}`\n\n"
+                f"📥 Ожидаю код Steam Guard... Попытка {attempt + 1} из {total_attempts}",
+                parse_mode="Markdown",
+                reply_markup=cancel_markup
+            )
+            await asyncio.sleep(wait_seconds)
+
+    # Если код не пришёл
+    await query.edit_message_text(
+        f"⚠️ Не удалось получить код Steam в течение {total_attempts * wait_seconds // 60} минут.\n"
+        "Попробуйте позже.",
+        reply_markup=main_menu_keyboard(user_id)
+    )
+    session.add(AccountLog(
+        user_id=user_id,
+        account_id=acc.id,
+        action='Арендован (Ошибка получения кода с почты)',
+        action_date=acc.rented_at
+    ))
+    context.user_data.clear()
     return ConversationHandler.END
+
+
+
 
 
 # --- Возврат аккаунта ---
@@ -588,6 +705,14 @@ async def finalize_return(update: Update, context: CallbackContext):
             acc.mmr = context.user_data["new_mmr"]
         if "new_behavior" in context.user_data:
             acc.behavior = context.user_data["new_behavior"]
+
+        # Запись в лог
+        session.add(AccountLog(
+            user_id=user_id,
+            account_id=acc.id,
+            action='Возврат аккаунта',
+            action_date=datetime.now(timezone.utc)
+        ))
 
         session.commit()
 
@@ -867,13 +992,63 @@ async def admin_add_mmr_handler(update: Update, context: CallbackContext):
         )
         session.add(new_acc)
         session.commit()
+        context.user_data["created_account_id"] = new_acc.id
         await update.message.reply_text(
             f"Аккаунт успешно добавлен:\nID {new_acc.id}, MMR {new_acc.mmr}",
             reply_markup=main_menu_keyboard(update.effective_user.id)
         )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Да", callback_data="2fa_yes"),
+             InlineKeyboardButton("❌ Нет", callback_data="2fa_no")]
+        ])
+        await update.message.reply_text("У аккаунта включена двухфакторная авторизация?", reply_markup=keyboard)
+        return ADMIN_ADD_2FA_ASK
     finally:
         session.close()
+
+async def admin_add_ask_2fa_handler(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "2fa_yes":
+        await query.edit_message_text("Введите логин от почты:")
+        return ADMIN_ADD_EMAIL
+
+    elif query.data == "2fa_no":
+        await query.edit_message_text("Аккаунт успешно добавлен без почты.", reply_markup=main_menu_keyboard(update.effective_user.id))
+        return ConversationHandler.END
+
+    else:
+        await query.edit_message_text("Неверный выбор. Повторите.")
+        return ADMIN_ADD_2FA_ASK
+
+async def admin_add_email_login_handler(update: Update, context: CallbackContext):
+    context.user_data['email_login'] = update.message.text.strip()
+    await update.message.reply_text("Введите пароль от почты:")
+    return ADMIN_ADD_EMAIL_PASSWORD
+
+async def admin_add_email_password_handler(update: Update, context: CallbackContext):
+
+    email_password = update.message.text.strip()
+    email_login = context.user_data.get("email_login")
+    account_id = context.user_data.get("created_account_id")
+
+    if not account_id:
+        await update.message.reply_text("Ошибка: ID аккаунта не найден.")
+        return ConversationHandler.END
+
+    session = Session()
+    try:
+        new_email = Email(login=email_login, password=email_password, accountfk=account_id)
+        session.add(new_email)
+        session.commit()
+        await update.message.reply_text("Почта успешно добавлена к аккаунту.",
+                                        reply_markup=main_menu_keyboard(update.effective_user.id))
+    finally:
+        session.close()
+
     return ConversationHandler.END
+
 
 async def admin_add_cancel(update: Update, context: CallbackContext):
     await update.message.reply_text("Добавление аккаунта отменено.", reply_markup=main_menu_keyboard(update.effective_user.id))
@@ -910,6 +1085,7 @@ async def admin_edit_choose_id(update: Update, context: CallbackContext):
         [InlineKeyboardButton("MMR", callback_data="edit_field_mmr")],
         [InlineKeyboardButton("Behavior", callback_data="edit_field_behavior")],
         [InlineKeyboardButton("Калибровка", callback_data="edit_field_calibration")],
+        [InlineKeyboardButton("Почта (2FA)", callback_data="edit_field_email")],
         [InlineKeyboardButton("Отмена", callback_data="admin_back")]
     ]
     await query.edit_message_text("Выберите поле для редактирования:", reply_markup=InlineKeyboardMarkup(buttons))
@@ -917,11 +1093,34 @@ async def admin_edit_choose_id(update: Update, context: CallbackContext):
 
 async def admin_edit_choose_field(update: Update, context: CallbackContext):
     query = update.callback_query
-    data = query.data
-    field = data.replace("edit_field_", "")
+    field = query.data.replace("edit_field_", "")
     context.user_data['edit_field'] = field
-    await query.edit_message_text(f"Введите новое значение для {get_field_display_name(field)}:")
+
+    if field == "email":
+        acc_id = context.user_data['edit_acc_id']
+        session = Session()
+        try:
+            email = session.query(Email).filter_by(accountfk=acc_id).first()
+            if email:
+                buttons = [
+                    [InlineKeyboardButton("Изменить логин", callback_data="email_edit_login")],
+                    [InlineKeyboardButton("Изменить пароль", callback_data="email_edit_password")],
+                    [InlineKeyboardButton("Отмена", callback_data="admin_back")]
+                ]
+                await query.edit_message_text("Выберите, что изменить в почте:", reply_markup=InlineKeyboardMarkup(buttons))
+            else:
+                buttons = [
+                    [InlineKeyboardButton("Добавить почту", callback_data="email_add_new")],
+                    [InlineKeyboardButton("Отмена", callback_data="admin_back")]
+                ]
+                await query.edit_message_text("Почта не найдена. Добавить новую?", reply_markup=InlineKeyboardMarkup(buttons))
+        finally:
+            session.close()
+        return ADMIN_EDIT_EMAIL_CHOOSE_FIELD
+
+    await query.edit_message_text(f"Введите новое значение для поля {get_field_display_name(field)}:")
     return ADMIN_EDIT_NEW_VALUE
+
 
 def get_field_display_name(field_name: str) -> str:
     field_map = {
@@ -944,39 +1143,83 @@ def get_field_display_name(field_name: str) -> str:
     }
     return field_map.get(field_name, field_name)
 
+async def admin_edit_email_choose_field(update: Update, context: CallbackContext):
+    query = update.callback_query
+    data = query.data
+
+    if data == "email_add_new":
+        context.user_data['email_edit_field'] = 'new'
+        await query.edit_message_text("Введите логин и пароль почты через `:` (пример: login@mail.com:password)")
+    elif data == "email_edit_login":
+        context.user_data['email_edit_field'] = 'login'
+        await query.edit_message_text("Введите новый логин почты:")
+    elif data == "email_edit_password":
+        context.user_data['email_edit_field'] = 'password'
+        await query.edit_message_text("Введите новый пароль почты:")
+    else:
+        await query.edit_message_text("Операция отменена.", reply_markup=main_menu_keyboard(query.from_user.id))
+        return ConversationHandler.END
+
+    return ADMIN_EDIT_NEW_VALUE
+
+
 async def admin_edit_new_value(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    value = update.message.text.strip()
+    text = update.message.text.strip()
     acc_id = context.user_data.get('edit_acc_id')
     field = context.user_data.get('edit_field')
+    email_mode = context.user_data.get('email_edit_field')
+
     session = Session()
     try:
         acc = session.query(Account).filter_by(id=acc_id).first()
         if not acc:
             await update.message.reply_text("Аккаунт не найден.", reply_markup=main_menu_keyboard(user_id))
             return ConversationHandler.END
-        # Валидация MMR
-        if field == "mmr" or field == "behavior":
-            if not value.isdigit():
-                await update.message.reply_text(f"{get_field_display_name(field)} должно быть числом. Попробуйте снова:")
-                return ADMIN_EDIT_NEW_VALUE
-            setattr(acc, field, int(value))
 
-        elif field == "calibration":
-            if value.lower() in ["да", "yes", "true", "1"]:
-                acc.calibration = True
-            elif value.lower() in ["нет", "no", "false", "0"]:
-                acc.calibration = False
-            else:
-                await update.message.reply_text("Введите 'да' или 'нет' для калибровки:")
+        if field == "email":
+            email = session.query(Email).filter_by(accountfk=acc_id).first()
+
+            if email_mode == 'new':
+                if ":" not in text:
+                    await update.message.reply_text("Неверный формат. Используйте: `login:password`")
+                    return ADMIN_EDIT_NEW_VALUE
+                login, password = map(str.strip, text.split(":", 1))
+                new_email = Email(login=login, password=password, accountfk=acc_id)
+                session.add(new_email)
+            elif email_mode == 'login':
+                if not email:
+                    await update.message.reply_text("Почта не найдена.")
+                    return ConversationHandler.END
+                email.login = text
+            elif email_mode == 'password':
+                if not email:
+                    await update.message.reply_text("Почта не найдена.")
+                    return ConversationHandler.END
+                email.password = text
+
+            session.commit()
+            await update.message.reply_text("Почта успешно обновлена.", reply_markup=main_menu_keyboard(user_id))
+            return ConversationHandler.END
+
+        # Обновление обычного поля
+        if field in ("mmr", "behavior"):
+            if not text.isdigit():
+                await update.message.reply_text("Введите числовое значение:")
                 return ADMIN_EDIT_NEW_VALUE
+            setattr(acc, field, int(text))
+        elif field == "calibration":
+            acc.calibration = text.lower() in ("да", "yes", "true", "1")
         else:
-            setattr(acc, field, value)
+            setattr(acc, field, text)
+
         session.commit()
         await update.message.reply_text("Аккаунт успешно обновлён.", reply_markup=main_menu_keyboard(user_id))
     finally:
         session.close()
+
     return ConversationHandler.END
+
 
 async def admin_edit_cancel(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
@@ -1032,13 +1275,21 @@ async def admin_delete_choose_account(update: Update, context: CallbackContext):
 
     acc_id = int(query.data.split("_")[-1])
     session = Session()
+
     try:
         acc = session.query(Account).filter_by(id=acc_id).first()
         if not acc:
             await query.answer("Аккаунт не найден", show_alert=True)
             return ConversationHandler.END
+
+        # Удаляем связанные email'ы
+        email = session.query(Email).filter_by(accountfk=acc_id).first()
+        if email:
+            session.delete(email)
+
         session.delete(acc)
         session.commit()
+
         await query.edit_message_text(f"Аккаунт ID {acc_id} удалён.", reply_markup=main_menu_keyboard(user_id))
     finally:
         session.close()
@@ -1058,26 +1309,32 @@ def auto_return_accounts():
 
                 end_time = rented_at + timedelta(minutes=acc.rent_duration)
                 if now >= end_time:
+                    logging.info(f"Автоматический возврат аккаунта ID {acc.id}, арендовал User {acc.renter_id}")
+
+                    # Добавляем лог в БД
+                    session.add(AccountLog(
+                        user_id=acc.renter_id,
+                        account_id=acc.id,
+                        action='Возврат аккаунта',
+                        action_date=datetime.now(timezone.utc)
+                    ))
+
+                    # Освобождаем аккаунт
                     acc.status = "free"
                     acc.renter_id = None
                     acc.rented_at = None
                     acc.rent_duration = None
-                    logging.info(f"Автоматический возврат аккаунта ID {acc.id}")
         session.commit()
     except Exception as e:
         logging.error(f"Ошибка автоматического возврата аккаунтов: {e}", exc_info=True)
     finally:
         session.close()
 
-scheduler.add_job(auto_return_accounts, 'interval', minutes=1)
-
-
-
 
 # --- Основной запуск ---
 def main():
     app = Application.builder().token(TOKEN).build()
-
+    scheduler.add_job(auto_return_accounts, 'interval', minutes=1)
     app.add_handler(CommandHandler("start", start))
 
     app.add_handler(CallbackQueryHandler(
@@ -1101,12 +1358,26 @@ def main():
     app.add_handler(return_conv)
 
     rent_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(rent_start, pattern="^rent_start$")],
+        entry_points=[
+            CallbackQueryHandler(rent_start, pattern="^rent_start$")
+        ],
         states={
-            USER_RENT_SELECT_ACCOUNT: [CallbackQueryHandler(rent_select_account, pattern="^rent_acc_\\d+$")],
-            USER_RENT_SELECT_DURATION: [CallbackQueryHandler(rent_select_duration, pattern="^rent_dur_\\d+$|^cancel_rent$")],
+            USER_RENT_SELECT_ACCOUNT: [
+                CallbackQueryHandler(rent_select_account, pattern="^rent_acc_\\d+$")
+            ],
+            USER_RENT_SELECT_DURATION: [
+                CallbackQueryHandler(rent_select_duration, pattern="^rent_dur_\\d+$")
+            ],
+            WAIT_FOR_2FA_CONFIRM: [
+                CallbackQueryHandler(confirm_2fa_handler, pattern="^confirm_2fa_(yes|no)$")
+            ],
+            WAIT_FOR_EMAIL_CODE: [
+                CallbackQueryHandler(wait_for_code_and_confirm, pattern="^wait_for_code$")
+            ],
         },
-        fallbacks=[CallbackQueryHandler(cancel_rent, pattern="^cancel_rent$")],
+        fallbacks=[
+            CallbackQueryHandler(cancel_rent, pattern="^cancel_rent$")
+        ],
         allow_reentry=True
     )
     app.add_handler(rent_conv)
@@ -1117,8 +1388,12 @@ def main():
             ADMIN_ADD_LOGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_login_handler)],
             ADMIN_ADD_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_password_handler)],
             ADMIN_ADD_BEHAVIOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_behavior_handler)],
-            ADMIN_ADD_CALIBRATION: [CallbackQueryHandler(admin_add_calibration_handler, pattern="^calibration_(yes|no)$")],
+            ADMIN_ADD_CALIBRATION: [CallbackQueryHandler(admin_add_calibration_handler)],
             ADMIN_ADD_MMR: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_mmr_handler)],
+            ADMIN_ADD_2FA_ASK: [CallbackQueryHandler(admin_add_ask_2fa_handler)],
+            ADMIN_ADD_EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_email_login_handler)],
+            ADMIN_ADD_EMAIL_PASSWORD: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_email_password_handler)],
         },
         fallbacks=[CommandHandler("cancel", admin_add_cancel)],
         allow_reentry=True
@@ -1130,10 +1405,13 @@ def main():
         states={
             ADMIN_EDIT_CHOOSE_ID: [
                 CallbackQueryHandler(admin_edit_choose_id, pattern="^edit_acc_\\d+$"),
-
             ],
             ADMIN_EDIT_CHOOSE_FIELD: [
                 CallbackQueryHandler(admin_edit_choose_field, pattern="^edit_field_\\w+$")
+            ],
+            ADMIN_EDIT_EMAIL_CHOOSE_FIELD: [
+                CallbackQueryHandler(admin_edit_email_choose_field,
+                                     pattern="^email_(add_new|edit_login|edit_password)$")
             ],
             ADMIN_EDIT_NEW_VALUE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_edit_new_value)
@@ -1141,7 +1419,7 @@ def main():
         },
         fallbacks=[
             CommandHandler('cancel', admin_edit_cancel),
-            CallbackQueryHandler(admin_edit_cancel, pattern="^admin_back$"),
+            CallbackQueryHandler(admin_edit_cancel, pattern="^admin_back$")
         ],
         allow_reentry=True
     )
@@ -1164,9 +1442,6 @@ def main():
     app.add_handler(CallbackQueryHandler(show_all_users_handler, pattern="^show_all_users$"))
     app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer(), pattern="^ignore_"))
     print("Бот запущен...")
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.daemon = True
-    flask_thread.start()
     app.run_polling()
 
 if __name__ == '__main__':
