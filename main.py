@@ -16,7 +16,7 @@ from getCodeFromMail import FirstMailCodeReader
 
 from models import Account, User, AccountLog, Email
 from config import TOKEN, Session, scheduler, ADMIN_IDS
-from utils import is_admin, format_datetime
+from utils import is_admin, format_datetime, show_registration_error, main_menu_keyboard
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup
 )
@@ -26,25 +26,10 @@ from telegram.ext import (
     ConversationHandler, MessageHandler, filters,
     CallbackQueryHandler
 )
-from telegram import ReplyKeyboardRemove
 from datetime import datetime, timedelta, timezone
 import logging
+from adminTextToEveryone import broadcast_conv
 
-
-async def show_registration_error(update: Update, message: str):
-    try:
-        if update.callback_query:
-            await update.callback_query.answer()
-            await update.callback_query.message.delete()
-        elif update.message:
-            await update.message.delete()
-    except Exception:
-        pass
-
-    await update.effective_chat.send_message(
-        text=message + "\n\nПожалуйста, отправьте команду /start, чтобы начать.",
-        reply_markup=ReplyKeyboardRemove()
-    )
 
 def format_duration(minutes: int) -> str:
     hours = minutes // 60
@@ -56,31 +41,7 @@ def format_duration(minutes: int) -> str:
         parts.append(f"{mins} мин")
     return " ".join(parts) if parts else "0 мин"
 
-def main_menu_keyboard(user_id):
-    buttons = []
 
-    # Блок пользователя
-    buttons.append([InlineKeyboardButton("⠀", callback_data="ignore_gap")])
-    buttons.append([InlineKeyboardButton("👤 Пользовательское меню:", callback_data="ignore_user_menu")])
-    buttons.append([InlineKeyboardButton("🔍 Список аккаунтов", callback_data="list")])
-    buttons.append([InlineKeyboardButton("📦 Мой аккаунт", callback_data="my")])
-    buttons.append([InlineKeyboardButton("📥 Взять в аренду", callback_data="rent_start")])
-    buttons.append([InlineKeyboardButton("📤 Вернуть аккаунт", callback_data="return")])
-    buttons.append([InlineKeyboardButton("👤 Кто я", callback_data="whoami")])
-
-
-    # Блок администратора (если админ)
-    if is_admin(user_id):
-        buttons.append([InlineKeyboardButton("⠀", callback_data="ignore_gap")])
-        buttons.append([InlineKeyboardButton("🛡 Админ-панель:", callback_data="ignore_admin_panel")])
-        buttons.append([InlineKeyboardButton("➕ Добавить аккаунт", callback_data="admin_add_start")])
-        buttons.append([InlineKeyboardButton("✏️ Редактировать аккаунт", callback_data="admin_edit_start")])
-        buttons.append([InlineKeyboardButton("🗑 Удалить аккаунт", callback_data="admin_delete_start")])
-        buttons.append([InlineKeyboardButton("📋 Все пользователи", callback_data="show_all_users")])
-        buttons.append([InlineKeyboardButton("🆕 Новые пользователи", callback_data="show_pending_users")])
-        buttons.append([InlineKeyboardButton("⠀", callback_data="ignore_gap")])
-
-    return InlineKeyboardMarkup(buttons)
 
 async def notify_admins_new_user(session, new_user: User, app: Application):
     for admin_id in ADMIN_IDS:
@@ -109,17 +70,34 @@ async def start(update: Update, context: CallbackContext):
     user_id = user.id
     session = Session()
     try:
+        # Если это callback_query (например, из кнопки), ответим и удалим сообщение
+        if update.callback_query:
+            await update.callback_query.answer()
+            try:
+                await update.callback_query.message.delete()
+            except Exception:
+                pass
+        # Если это обычное сообщение, можно попытаться удалить (если нужно)
+        elif update.message:
+            try:
+                await update.message.delete()
+            except Exception:
+                pass
+
         existing_user = session.query(User).filter_by(telegram_id=user_id).first()
 
         if existing_user:
             if existing_user.is_approved:
                 role = "Админ" if is_admin(user_id) else "Пользователь"
-                await update.message.reply_text(
+                await update.effective_chat.send_message(
                     f"Привет, {role}! Этот бот позволяет арендовать Steam аккаунты с Dota 2 MMR.",
                     reply_markup=main_menu_keyboard(user_id)
                 )
             else:
-                await update.message.reply_text("Ваш аккаунт ещё не подтверждён админом. Пожалуйста, подождите.")
+                await update.effective_chat.send_message(
+                    "Ваш аккаунт ещё не подтверждён админом. Пожалуйста, подождите."
+                )
+            return ConversationHandler.END
         else:
             is_approved = is_admin(user_id)
             new_user = User(
@@ -134,17 +112,19 @@ async def start(update: Update, context: CallbackContext):
             session.commit()
 
             if is_approved:
-                await update.message.reply_text(
+                await update.effective_chat.send_message(
                     "Привет, Админ! Этот бот позволяет арендовать Steam аккаунты с Dota 2 MMR.",
                     reply_markup=main_menu_keyboard(user_id)
                 )
             else:
-                await update.message.reply_text(
+                await update.effective_chat.send_message(
                     "Спасибо за регистрацию! Ваш аккаунт ожидает подтверждения админом. Пожалуйста, дождитесь подтверждения."
                 )
                 await notify_admins_new_user(session, new_user, context.application)
+            return ConversationHandler.END
     finally:
         session.close()
+
 
 async def list_accounts(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
@@ -431,7 +411,7 @@ async def rent_select_duration(update: Update, context: CallbackContext):
 
     session = Session()
     try:
-        acc = session.query(Account).filter_by(id=acc_id).first()
+        acc = session.query(Account).get()
         if not acc or acc.status != "free":
             await query.answer("Аккаунт уже арендован.", show_alert=True)
             return ConversationHandler.END
@@ -1315,7 +1295,7 @@ def auto_return_accounts():
                     session.add(AccountLog(
                         user_id=acc.renter_id,
                         account_id=acc.id,
-                        action='Возврат аккаунта',
+                        action='Возврат аккаунта(Автоматический)',
                         action_date=datetime.now(timezone.utc)
                     ))
 
@@ -1439,6 +1419,7 @@ def main():
         allow_reentry=True
     )
     app.add_handler(delete_acc_conv)
+    app.add_handler(broadcast_conv)
     app.add_handler(CallbackQueryHandler(show_all_users_handler, pattern="^show_all_users$"))
     app.add_handler(CallbackQueryHandler(lambda update, context: update.callback_query.answer(), pattern="^ignore_"))
     print("Бот запущен...")
