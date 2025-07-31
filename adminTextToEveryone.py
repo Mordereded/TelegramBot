@@ -4,7 +4,10 @@ from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Update
 from telegram.ext import CallbackContext, CallbackQueryHandler, MessageHandler, ConversationHandler, CommandHandler, filters
 from utils import get_all_user_ids, show_registration_error, is_admin, main_menu_keyboard, check_user_is_approved_and_admin
 from States import ADMIN_BROADCAST_MESSAGE
+import traceback
+import logging
 import html
+import asyncio
 
 
 
@@ -51,15 +54,18 @@ async def admin_broadcast_cancel_callback(update: Update, context: CallbackConte
     return ConversationHandler.END
 
 
+
+
 async def admin_broadcast_send(update: Update, context: CallbackContext):
     message_text = update.message.text
     admin_id = update.effective_user.id
     user_ids = [uid for uid in get_all_user_ids() if uid != admin_id]
-    print(f"Отправка пользователям {user_ids}")
+    logging.info(f"Отправка рассылки пользователям: {user_ids}")
+
     try:
         await update.message.delete()
     except Exception as e:
-        print(f"Ошибка при удалении сообщения админа: {e}")
+        logging.warning(f"Ошибка при удалении сообщения админа: {e}")
 
     async def send_message(user_id):
         try:
@@ -69,20 +75,32 @@ async def admin_broadcast_send(update: Update, context: CallbackContext):
                 text=escaped,
                 parse_mode="HTML"
             )
+            logging.info(f"✅ Сообщение успешно отправлено пользователю {user_id}")
             return True
         except Exception as e:
-            print(f"❌ Не отправлено пользователю {user_id}: {e}")
+            logging.error(f"❌ Не отправлено пользователю {user_id}: {e}")
+            logging.error(traceback.format_exc())
             return False
 
     tasks = [send_message(uid) for uid in user_ids]
     results = await asyncio.gather(*tasks)
-    count = sum(results)
+
+    count_success = sum(results)
+    count_fail = len(results) - count_success
+
+    result_message = (
+        f"✅ Рассылка завершена.\n"
+        f"Отправлено успешно: {count_success} пользователям.\n"
+        f"Не отправлено: {count_fail} пользователям.\n\n"
+        f"📋 Главное меню:"
+    )
 
     await context.bot.send_message(
         chat_id=admin_id,
-        text=f"✅ Рассылка завершена. Отправлено {count} пользователям.\n\n📋 Главное меню:",
+        text=result_message,
         reply_markup=main_menu_keyboard(admin_id)
     )
+
     return ConversationHandler.END
 
 
