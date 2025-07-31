@@ -69,10 +69,13 @@ async def admin_broadcast_send(update: Update, context: CallbackContext):
 
     async def send_message(user_id):
         try:
-            escaped = html.escape(message_text)
+            full_message = (
+                f"{html.escape(message_text)}\n\n"
+                f"📋 Чтобы открыть меню, нажмите или введите команду /start"
+            )
             await context.bot.send_message(
                 chat_id=user_id,
-                text=escaped,
+                text=full_message,
                 parse_mode="HTML"
             )
             logging.info(f"✅ Сообщение успешно отправлено пользователю {user_id}")
@@ -92,7 +95,8 @@ async def admin_broadcast_send(update: Update, context: CallbackContext):
         f"✅ Рассылка завершена.\n"
         f"Отправлено успешно: {count_success} пользователям.\n"
         f"Не отправлено: {count_fail} пользователям.\n\n"
-        f"📋 Главное меню:"
+        f"📋 Главное меню:\n"
+        f"Если меню не появилось — введите /start"
     )
 
     await context.bot.send_message(
