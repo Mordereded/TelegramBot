@@ -1,8 +1,10 @@
+import asyncio
+
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Update
 from telegram.ext import CallbackContext, CallbackQueryHandler, MessageHandler, ConversationHandler, CommandHandler, filters
 from utils import get_all_user_ids, show_registration_error, is_admin, main_menu_keyboard, check_user_is_approved_and_admin
 from States import ADMIN_BROADCAST_MESSAGE
-
+import html
 
 
 
@@ -53,32 +55,34 @@ async def admin_broadcast_send(update: Update, context: CallbackContext):
     message_text = update.message.text
     admin_id = update.effective_user.id
     user_ids = [uid for uid in get_all_user_ids() if uid != admin_id]
-
-    # Удаляем сообщение администратора
+    print(f"Отправка пользователям {user_ids}")
     try:
         await update.message.delete()
     except Exception as e:
         print(f"Ошибка при удалении сообщения админа: {e}")
 
-    count = 0
-    for user_id in user_ids:
+    async def send_message(user_id):
         try:
+            escaped = html.escape(message_text)
             await context.bot.send_message(
                 chat_id=user_id,
-                text=f"⚠️ *Оповещение от админа:*\n\n{message_text}",
-                parse_mode="Markdown"
+                text=escaped,
+                parse_mode="HTML"
             )
-            count += 1
+            return True
         except Exception as e:
-            print(f"Не удалось отправить пользователю {user_id}: {e}")
+            print(f"❌ Не отправлено пользователю {user_id}: {e}")
+            return False
 
-    # Подтверждение + главное меню
+    tasks = [send_message(uid) for uid in user_ids]
+    results = await asyncio.gather(*tasks)
+    count = sum(results)
+
     await context.bot.send_message(
         chat_id=admin_id,
         text=f"✅ Рассылка завершена. Отправлено {count} пользователям.\n\n📋 Главное меню:",
         reply_markup=main_menu_keyboard(admin_id)
     )
-
     return ConversationHandler.END
 
 

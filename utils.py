@@ -31,7 +31,8 @@ def format_datetime(dt):
 
 def get_all_user_ids():
     with Session() as session:
-        return [user_id for (user_id,) in session.query(User.telegram_id).all()]
+        users = session.query(User).filter(User.is_approved == True).all()
+        return [u.telegram_id for u in users]
 
 
 async def show_registration_error(update: Update, message: str):
@@ -54,7 +55,7 @@ def main_menu_keyboard(user_id):
     buttons = []
 
     # Заголовок пользовательского блока
-    buttons.append([InlineKeyboardButton("👤 Пользовательское меню", callback_data="ignore_user_menu")])
+    buttons.append([InlineKeyboardButton("️👤 Пользовательское меню⬇", callback_data="ignore_user_menu")])
 
     # Пользовательские действия, сгруппированные
     buttons += [
@@ -70,7 +71,7 @@ def main_menu_keyboard(user_id):
     # Админ-блок
     if is_admin(user_id):
         # Разделитель
-        buttons.append([InlineKeyboardButton("🛡 Админ-панель", callback_data="ignore_admin_panel")])
+        buttons.append([InlineKeyboardButton("⬇🛡 Админ-панель⬇", callback_data="ignore_admin_panel")])
 
         # Админ-действия, сгруппированные
         buttons += [
