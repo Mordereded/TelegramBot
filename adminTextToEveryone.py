@@ -1,34 +1,13 @@
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Update
 from telegram.ext import CallbackContext, CallbackQueryHandler, MessageHandler, ConversationHandler, CommandHandler, filters
-from utils import get_all_user_ids, show_registration_error, is_admin, main_menu_keyboard
-from config import Session
-from models import User
+from utils import get_all_user_ids, show_registration_error, is_admin, main_menu_keyboard, check_user_is_approved_and_admin
 from States import ADMIN_BROADCAST_MESSAGE
 
 
-async def check_user_is_approved_and_admin(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    session = Session()
-    user_obj = session.query(User).filter_by(telegram_id=user_id).first()
-    session.close()
-
-    if not user_obj:
-        await show_registration_error(update, "❌ Вы не зарегистрированы.")
-        return False
-
-    if not user_obj.is_approved:
-        await show_registration_error(update, "⏳ Ваш аккаунт ещё не подтверждён админом.")
-        return False
-
-    if not is_admin(user_id):
-        await show_registration_error(update, "❌ У вас нет прав администратора.")
-        return False
-
-    return True
 
 
 async def admin_broadcast_start(update: Update, context: CallbackContext):
-    allowed = await check_user_is_approved_and_admin(update, context)
+    allowed = await check_user_is_approved_and_admin(update)
     if not allowed:
         return ConversationHandler.END
 
@@ -37,7 +16,6 @@ async def admin_broadcast_start(update: Update, context: CallbackContext):
 
     keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="cancel_broadcast")]]
 
-    # Удаляем предыдущее сообщение с меню
     try:
         await query.message.delete()
     except Exception as e:

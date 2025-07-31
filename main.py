@@ -2,6 +2,7 @@
 import asyncio
 
 from sqlalchemy import except_, desc
+from telegram.constants import ParseMode
 
 from States import (
     ADMIN_ADD_LOGIN, ADMIN_ADD_PASSWORD, ADMIN_ADD_MMR,
@@ -16,7 +17,8 @@ from getCodeFromMail import FirstMailCodeReader
 
 from models import Account, User, AccountLog, Email
 from config import TOKEN, Session, scheduler, ADMIN_IDS
-from utils import is_admin, format_datetime, show_registration_error, main_menu_keyboard
+from utils import is_admin, format_datetime, show_registration_error, main_menu_keyboard, \
+    check_user_is_approved_and_admin
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup
 )
@@ -310,56 +312,99 @@ async def whoami(update: Update, context: CallbackContext):
 
 
 
-
-
-# --- Аренда: старт выбора аккаунта ---
 async def rent_start(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     session = Session()
+
+    def format_calibrated(calibration):
+        return "✅ Да" if calibration else "❌ Нет"
+
     try:
         user_obj = session.query(User).filter_by(telegram_id=user_id).first()
-
         if not user_obj:
-            await show_registration_error(update, "Вы не зарегистрированы.")
+            await show_registration_error(update, "❌ Вы не зарегистрированы.")
             return ConversationHandler.END
-
         if not user_obj.is_approved:
-            await show_registration_error(update, "Ваш аккаунт ещё не подтверждён админом.")
+            await show_registration_error(update, "⏳ Ваш аккаунт ещё не подтверждён админом.")
             return ConversationHandler.END
 
-        # Проверяем, есть ли уже арендованный аккаунт у пользователя
-        already_rented = session.query(Account).filter_by(renter_id=user_id, status="rented").first()
-        if already_rented:
-            text = f"У вас уже есть арендованный аккаунт ID {already_rented.id}. Сначала верните его."
+        rented_acc = session.query(Account).filter_by(renter_id=user_id, status="rented").first()
+        if rented_acc:
+            text = f"⚠️ У вас уже есть арендованный аккаунт ID {rented_acc.id}. Сначала верните его."
             if update.callback_query:
                 await update.callback_query.answer(text, show_alert=True)
-                # Можно просто отредактировать сообщение, чтобы не оставлять кнопки аренды:
                 await update.callback_query.edit_message_text(text, reply_markup=main_menu_keyboard(user_id))
             else:
                 await update.message.reply_text(text, reply_markup=main_menu_keyboard(user_id))
             return ConversationHandler.END
 
-        free_accs = session.query(Account).filter_by(status="free").all()
-        if not free_accs:
+        free_accounts = session.query(Account).filter_by(status="free").all()
+        if not free_accounts:
+            msg = "Свободных аккаунтов нет."
             if update.callback_query:
-                await update.callback_query.answer("Свободных аккаунтов нет.", show_alert=True)
+                await update.callback_query.answer(msg, show_alert=True)
+            else:
+                await update.message.reply_text(msg, reply_markup=main_menu_keyboard(user_id))
             return ConversationHandler.END
+        free_accounts.sort(key=lambda acc: acc.mmr if acc.mmr else 0, reverse=True)
 
-        buttons = [
 
-            [InlineKeyboardButton(f"MMR: {acc.mmr} Откалиброван: {'Да' if acc.calibration == 1 else 'Нет'} Порядочность: {acc.behavior}", callback_data=f"rent_acc_{acc.id}")]
-            for acc in free_accs
+        parts = []
+        for acc in free_accounts:
+            calibrated = format_calibrated(acc.calibration)
+            behavior = acc.behavior if acc.behavior is not None else "—"
+            mmr = acc.mmr if acc.mmr is not None else "—"
+            status = acc.status or "—"
 
-        ]
-        # Кнопка отмены — callback_data "cancel_rent", чтобы ловилась fallbacks
-        buttons.append([InlineKeyboardButton("Отмена", callback_data="cancel_rent")])
+            part = (
+                f"🆔 <b>ID:</b> {acc.id}\n"
+                f"🎯 <b>Откалиброван:</b> {calibrated}\n"
+                f"📈 <b>MMR:</b> {mmr}\n"
+                f"🧠 <b>Поведение:</b> {behavior}\n"
+                f"🔒 <b>Статус:</b> {status}\n"
+                "──────────────────────────────"
+            )
+            parts.append(part)
+
+        max_len = 4000
+        messages = []
+        current_msg = ""
+        for part in parts:
+            if len(current_msg) + len(part) + 2 > max_len:
+                messages.append(current_msg)
+                current_msg = part + "\n\n"
+            else:
+                current_msg += part + "\n\n"
+        if current_msg:
+            messages.append(current_msg)
+
+        buttons = []
+        row = []
+        for acc in free_accounts:
+            btn = InlineKeyboardButton(f"ID {acc.id}", callback_data=f"rent_acc_{acc.id}")
+            row.append(btn)
+            if len(row) == 3:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+
+        buttons.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_rent")])
+        reply_markup = InlineKeyboardMarkup(buttons)
 
         if update.callback_query:
             await update.callback_query.answer()
             await update.callback_query.edit_message_text(
-                "Выберите аккаунт для аренды:", reply_markup=InlineKeyboardMarkup(buttons)
+                messages[0], reply_markup=reply_markup, parse_mode="HTML"
             )
+        else:
+            await update.message.reply_text(messages[0], reply_markup=reply_markup, parse_mode="HTML")
+
+        for msg_text in messages[1:]:
+            await context.bot.send_message(chat_id=user_id, text=msg_text, parse_mode="HTML")
+
         return USER_RENT_SELECT_ACCOUNT
+
     finally:
         session.close()
 
@@ -411,7 +456,7 @@ async def rent_select_duration(update: Update, context: CallbackContext):
 
     session = Session()
     try:
-        acc = session.query(Account).get()
+        acc = session.query(Account).get(acc_id)
         if not acc or acc.status != "free":
             await query.answer("Аккаунт уже арендован.", show_alert=True)
             return ConversationHandler.END
@@ -725,27 +770,40 @@ async def return_select_fields(update: Update, context: CallbackContext):
 # --- Админ: Показать новых пользователей ---
 async def show_pending_users_handler(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    if not is_admin(user_id):
-        await update.callback_query.answer("Доступ запрещён", show_alert=True)
-        return
+    is_valid = await check_user_is_approved_and_admin(update)
+    if not is_valid:
+        return ConversationHandler.END
     session = Session()
     try:
         pending_users = session.query(User).filter_by(is_approved=False).all()
+
         if not pending_users:
-            text = "Нет новых пользователей, ожидающих подтверждения."
-            await update.callback_query.edit_message_text(text, reply_markup=main_menu_keyboard(user_id))
+            text = "🟢 <b>Нет новых пользователей, ожидающих подтверждения.</b>"
+            await update.callback_query.edit_message_text(
+                text, reply_markup=main_menu_keyboard(user_id), parse_mode="HTML"
+            )
             return
-        text = "Новые пользователи:\n\n"
+
+        text = "🕓 <b>Новые пользователи, ожидающие подтверждения:</b>\n\n"
         buttons = []
+
         for u in pending_users:
-            uname = f"@{u.username}" if u.username else "(нет username)"
-            text += f"ID: {u.telegram_id} {uname}\n"
+            uname = f"@{u.username}" if u.username else "<i>(нет username)</i>"
+            text += (
+                f"👤 <b>ID:</b> <code>{u.telegram_id}</code>\n"
+                f"   <b>Username:</b> {uname}\n\n"
+            )
             buttons.append([
                 InlineKeyboardButton("✅ Подтвердить", callback_data=f"approve_user_{u.telegram_id}"),
                 InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_user_{u.telegram_id}"),
             ])
+
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="admin_back")])
-        await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+        await update.callback_query.edit_message_text(
+            text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="HTML"
+        )
+
     finally:
         session.close()
 
@@ -755,9 +813,9 @@ async def admin_approve_reject_handler(update: Update, context: CallbackContext)
     user_id = query.from_user.id
     data = query.data
 
-    if not is_admin(user_id):
-        await query.answer("Доступ запрещён", show_alert=True)
-        return
+    is_valid = await check_user_is_approved_and_admin(update)
+    if not is_valid:
+        return ConversationHandler.END
 
     session = Session()
     try:
@@ -768,7 +826,7 @@ async def admin_approve_reject_handler(update: Update, context: CallbackContext)
             if user:
                 if user.is_approved:
                     await query.answer("Пользователь уже подтверждён", show_alert=True)
-                    return
+                    return ConversationHandler.END
 
                 user.is_approved = True
                 session.commit()
@@ -793,11 +851,10 @@ async def admin_approve_reject_handler(update: Update, context: CallbackContext)
             if user:
                 if is_admin(target_id):
                     await query.answer("Нельзя отклонить администратора!", show_alert=True)
-                    return
+                    return ConversationHandler.END
                 user.is_approved = False
                 session.commit()
                 await query.answer("Пользователь отклонён")
-                # При желании можно уведомить пользователя
                 try:
                     await context.application.bot.send_message(
                         target_id,
@@ -815,11 +872,11 @@ async def admin_approve_reject_handler(update: Update, context: CallbackContext)
 
             if target_id == user_id:
                 await query.answer("Вы не можете удалить самого себя!", show_alert=True)
-                return
+                return ConversationHandler.END
 
             if is_admin(target_id):
                 await query.answer("Нельзя удалить другого администратора!", show_alert=True)
-                return
+                return ConversationHandler.END
 
             user = session.query(User).filter_by(telegram_id=target_id).first()
             if user:
@@ -840,22 +897,22 @@ async def admin_approve_reject_handler(update: Update, context: CallbackContext)
         # --- Показать новых пользователей ---
         elif data == "show_pending_users":
             await show_pending_users_handler(update, context)
-            return
+            return ConversationHandler.END
 
         # --- Показать всех пользователей ---
         elif data == "show_all_users":
             await show_all_users_handler(update, context)
-            return
+            return ConversationHandler.END
 
         # --- Назад в главное меню ---
         elif data == "admin_back":
             await query.edit_message_text("Главное меню", reply_markup=main_menu_keyboard(user_id))
-            return
+            return ConversationHandler.END
 
         # --- Показать список аккаунтов ---
         elif data == "list":
             await list_accounts(update, context)
-            return
+            return ConversationHandler.END
 
         else:
             await query.answer()
@@ -873,39 +930,112 @@ async def admin_approve_reject_handler(update: Update, context: CallbackContext)
 
 
 # --- Админ: показать всех пользователей ---
+from datetime import datetime
+
 async def show_all_users_handler(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    if not is_admin(user_id):
-        await update.callback_query.answer("Доступ запрещён", show_alert=True)
-        return
+
+    is_valid = await check_user_is_approved_and_admin(update)
+    if not is_valid:
+        return ConversationHandler.END
+
     session = Session()
     try:
         users = session.query(User).all()
         if not users:
-            text = "Пользователей нет."
-            await update.callback_query.edit_message_text(text, reply_markup=main_menu_keyboard(user_id))
+            text = "📭 <b>Пользователей нет.</b>"
+            await update.callback_query.edit_message_text(
+                text, reply_markup=main_menu_keyboard(user_id), parse_mode="HTML"
+            )
             return
 
-        text = "Все пользователи:\n\n"
-        buttons = []
+        users_with_role = []
         for u in users:
-            uname = f"@{u.username}" if u.username else "(нет username)"
+            role = "Админ" if is_admin(u.telegram_id) else "Польз"
+            users_with_role.append((u, role))
+
+        users_sorted = sorted(
+            users_with_role,
+            key=lambda x: (
+                0 if x[1] == "Админ" else 1,
+                x[0].registered_at if hasattr(x[0], "registered_at") and x[0].registered_at else datetime.min
+            ),
+            reverse=True
+        )
+
+        # Ширина колонок
+        ID_WIDTH = 20
+        USERNAME_WIDTH = 20
+        ROLE_WIDTH = 12
+        DATE_WIDTH = 12
+        STATUS_WIDTH = 4
+
+        header = (
+            f"{'ID'.ljust(ID_WIDTH)}"
+            f"{'Username'.ljust(USERNAME_WIDTH)}"
+            f"{'Роль'.ljust(ROLE_WIDTH)}"
+            f"{'Регистрация'.ljust(DATE_WIDTH)}"
+            f"{'Статус'.rjust(STATUS_WIDTH)}\n"
+        )
+        header = "<pre>" + header + "</pre>"
+
+        rows = ""
+        for u, role in users_sorted:
+            id_str = str(u.telegram_id).ljust(ID_WIDTH)
+
+            # Если username есть — выводим @username, иначе id
+            uname = f"@{u.username}" if u.username else str(u.telegram_id)
+            if len(uname) > USERNAME_WIDTH - 3:
+                uname = uname[:USERNAME_WIDTH - 3] + "..."
+            uname_str = uname.ljust(USERNAME_WIDTH)
+
+            role_str = role.ljust(ROLE_WIDTH)
+            if hasattr(u, "registered_at") and isinstance(u.registered_at, datetime):
+                date_str = u.registered_at.strftime("%d.%m.%Y").ljust(DATE_WIDTH)
+            else:
+                date_str = "(нет)".ljust(DATE_WIDTH)
+
             approved = "✅" if u.is_approved else "❌"
-            text += f"ID: {u.telegram_id} {uname} Подтверждён: {approved}\n"
-            buttons.append([
-                InlineKeyboardButton(f"Удалить {u.telegram_id}", callback_data=f"delete_user_{u.telegram_id}")
-            ])
+            status_str = approved.rjust(STATUS_WIDTH)
+
+            row = f"{id_str}{uname_str}{role_str}{date_str}{status_str}\n"
+            rows += row
+
+        text = f"👥 <b>Список всех пользователей:</b>\n\n<pre>{header}{rows}</pre>"
+
+        # Кнопки удаления — username или id, с обрезкой
+        buttons = []
+        row_buttons = []
+        for _, (u, _) in enumerate(users_sorted):
+            btn_name = f"@{u.username}" if u.username else str(u.telegram_id)
+            if len(btn_name) > 20:
+                btn_name = btn_name[:17] + "..."
+            btn = InlineKeyboardButton(
+                f"🗑 {btn_name}",
+                callback_data=f"delete_user_{u.telegram_id}"
+            )
+            row_buttons.append(btn)
+            if len(row_buttons) == 3:
+                buttons.append(row_buttons)
+                row_buttons = []
+        if row_buttons:
+            buttons.append(row_buttons)
+
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="admin_back")])
 
-        await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        await update.callback_query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="HTML"
+        )
     finally:
         session.close()
 
 # --- Добавление аккаунта (ConversationHandler) ---
 async def admin_add_start(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    if not is_admin(user_id):
-        await update.callback_query.answer("Доступ запрещён", show_alert=True)
+    is_valid = await check_user_is_approved_and_admin(update)
+    if not is_valid:
         return ConversationHandler.END
     await update.callback_query.edit_message_text("Введите логин нового аккаунта:")
     return ADMIN_ADD_LOGIN
@@ -1036,20 +1166,81 @@ async def admin_add_cancel(update: Update, context: CallbackContext):
 
 # --- Редактирование аккаунта (ConversationHandler) ---
 async def admin_edit_start(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    if not is_admin(user_id):
-        await update.callback_query.answer("Доступ запрещён", show_alert=True)
+
+    is_valid = await check_user_is_approved_and_admin(update)
+    if not is_valid:
         return ConversationHandler.END
+
     session = Session()
     try:
-        accounts = session.query(Account).all()
-        buttons = []
+        # Запрос с сортировкой по возрастанию id
+        accounts = session.query(Account).order_by(Account.id).all()
+
+        if not accounts:
+            await update.callback_query.edit_message_text(
+                "📭 <b>Аккаунтов нет.</b>",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin_back")]])
+            )
+            return ConversationHandler.END
+
+        # Настройка ширины колонок
+        ID_WIDTH = 6
+        LOGIN_WIDTH = 20
+        MMR_WIDTH = 6
+        STATUS_WIDTH = 12
+
+        header = (
+            f"{'ID'.ljust(ID_WIDTH)}"
+            f"{'Login'.ljust(LOGIN_WIDTH)}"
+            f"{'MMR'.ljust(MMR_WIDTH)}"
+            f"{'Статус'.ljust(STATUS_WIDTH)}\n"
+        )
+        header = "<pre>" + header + "</pre>"
+
+        rows = ""
         for acc in accounts:
-            buttons.append([InlineKeyboardButton(f"ID: {acc.id}\n Login: {acc.login}\n MMR: {acc.mmr}\n Статус: {acc.status}", callback_data=f"edit_acc_{acc.id}")])
-        buttons.append([InlineKeyboardButton("Отмена", callback_data="admin_back")])
-        await update.callback_query.edit_message_text("Выберите аккаунт для редактирования:", reply_markup=InlineKeyboardMarkup(buttons))
+            id_str = str(acc.id).ljust(ID_WIDTH)
+            login = acc.login if acc.login else "(нет)"
+            if len(login) > LOGIN_WIDTH - 3:
+                login = login[:LOGIN_WIDTH - 3] + "..."
+            login_str = login.ljust(LOGIN_WIDTH)
+
+            mmr_str = str(acc.mmr).ljust(MMR_WIDTH)
+            status = acc.status if acc.status else "(нет)"
+            if len(status) > STATUS_WIDTH - 3:
+                status = status[:STATUS_WIDTH - 3] + "..."
+            status_str = status.ljust(STATUS_WIDTH)
+
+            rows += f"{id_str}{login_str}{mmr_str}{status_str}\n"
+
+        text = f"📝 <b>Список аккаунтов для редактирования:</b>\n\n<pre>{header}{rows}</pre>"
+
+        # Кнопки с ID аккаунта по 3 в ряд
+        buttons = []
+        row_buttons = []
+        for acc in accounts:
+            btn = InlineKeyboardButton(
+                f"ID {acc.id}",
+                callback_data=f"edit_acc_{acc.id}"
+            )
+            row_buttons.append(btn)
+            if len(row_buttons) == 3:
+                buttons.append(row_buttons)
+                row_buttons = []
+        if row_buttons:
+            buttons.append(row_buttons)
+
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="admin_back")])
+
+        await update.callback_query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="HTML"
+        )
     finally:
         session.close()
+
     return ADMIN_EDIT_CHOOSE_ID
 
 async def admin_edit_choose_id(update: Update, context: CallbackContext):
@@ -1059,17 +1250,42 @@ async def admin_edit_choose_id(update: Update, context: CallbackContext):
     acc_id = int(data.split("_")[-1])
     context.user_data['edit_acc_id'] = acc_id
 
-    buttons = [
-        [InlineKeyboardButton("Логин", callback_data="edit_field_login")],
-        [InlineKeyboardButton("Пароль", callback_data="edit_field_password")],
-        [InlineKeyboardButton("MMR", callback_data="edit_field_mmr")],
-        [InlineKeyboardButton("Behavior", callback_data="edit_field_behavior")],
-        [InlineKeyboardButton("Калибровка", callback_data="edit_field_calibration")],
-        [InlineKeyboardButton("Почта (2FA)", callback_data="edit_field_email")],
-        [InlineKeyboardButton("Отмена", callback_data="admin_back")]
-    ]
-    await query.edit_message_text("Выберите поле для редактирования:", reply_markup=InlineKeyboardMarkup(buttons))
-    return ADMIN_EDIT_CHOOSE_FIELD
+    session = Session()
+    try:
+        acc = session.query(Account).get(acc_id)
+        if not acc:
+            await query.edit_message_text("❌ Аккаунт не найден.")
+            return ConversationHandler.END
+
+        # Получаем связанную почту (если есть)
+        email_obj = session.query(Email).filter_by(accountfk=acc.id).first()
+        email_info = email_obj.login if email_obj else "(нет)"
+
+        # Формируем строку с информацией по аккаунту
+        text = (
+            f"🆔 <b>ID:</b> {acc.id}\n"
+            f"👤 <b>Логин:</b> {acc.login or '(нет)'}\n"
+            f"🔑 <b>Пароль:</b> {acc.password or '(нет)'}\n"
+            f"📈 <b>MMR:</b> {acc.mmr if acc.mmr is not None else '(нет)'}\n"
+            f"🧠 <b>Поведение (Behavior):</b> {acc.behavior if acc.behavior is not None else '(нет)'}\n"
+            f"🎯 <b>Калибровка:</b> {'✅ Да' if getattr(acc, 'calibration', False) else '❌ Нет'}\n"
+            f"📧 <b>Почта (2FA):</b> {email_info}\n"
+        )
+
+        buttons = [
+            [InlineKeyboardButton("Логин", callback_data="edit_field_login")],
+            [InlineKeyboardButton("Пароль", callback_data="edit_field_password")],
+            [InlineKeyboardButton("MMR", callback_data="edit_field_mmr")],
+            [InlineKeyboardButton("Behavior", callback_data="edit_field_behavior")],
+            [InlineKeyboardButton("Калибровка", callback_data="edit_field_calibration")],
+            [InlineKeyboardButton("Почта (2FA)", callback_data="edit_field_email")],
+            [InlineKeyboardButton("Отмена", callback_data="admin_back")]
+        ]
+
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="HTML")
+        return ADMIN_EDIT_CHOOSE_FIELD
+    finally:
+        session.close()
 
 async def admin_edit_choose_field(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -1225,24 +1441,92 @@ async def admin_delete_cancel(update: Update, context: CallbackContext):
 
 async def admin_delete_start(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    if not is_admin(user_id):
-        await update.callback_query.answer("Доступ запрещён", show_alert=True)
+
+    is_valid = await check_user_is_approved_and_admin(update)
+    if not is_valid:
         return ConversationHandler.END
+
     session = Session()
     try:
-        accounts = session.query(Account).all()
+        accounts = session.query(Account).order_by(Account.id).all()
         if not accounts:
-            await update.callback_query.edit_message_text("Аккаунтов нет.", reply_markup=main_menu_keyboard(user_id))
+            await update.callback_query.edit_message_text(
+                "📭 <b>Аккаунтов нет.</b>",
+                parse_mode="HTML",
+                reply_markup=main_menu_keyboard(user_id)
+            )
             return ConversationHandler.END
 
-        buttons = [
-            [InlineKeyboardButton(f"ID {acc.id} MMR {acc.mmr} Статус {acc.status}", callback_data=f"delete_acc_{acc.id}")]
-            for acc in accounts
-        ]
+        # Ширина колонок подогнал под твои поля
+        ID_WIDTH = 6
+        LOGIN_WIDTH = 20
+        BEHAVIOR_WIDTH = 8
+        MMR_WIDTH = 6
+        STATUS_WIDTH = 12
+        RENTED_WIDTH = 8
+
+        header = (
+            f"{'ID'.ljust(ID_WIDTH)}"
+            f"{'Login'.ljust(LOGIN_WIDTH)}"
+            f"{'Behavior'.ljust(BEHAVIOR_WIDTH)}"
+            f"{'MMR'.ljust(MMR_WIDTH)}"
+            f"{'Статус'.ljust(STATUS_WIDTH)}"
+            f"{'Аренда'.ljust(RENTED_WIDTH)}\n"
+        )
+        header = "<pre>" + header + "</pre>"
+
+        rows = ""
+        for acc in accounts:
+            id_str = str(acc.id).ljust(ID_WIDTH)
+
+            login = acc.login if acc.login else "(нет)"
+            if len(login) > LOGIN_WIDTH - 3:
+                login = login[:LOGIN_WIDTH - 3] + "..."
+            login_str = login.ljust(LOGIN_WIDTH)
+
+            behavior_str = str(acc.behavior) if acc.behavior is not None else "(нет)"
+            behavior_str = behavior_str.ljust(BEHAVIOR_WIDTH)
+
+            mmr_str = str(acc.mmr) if acc.mmr is not None else "(нет)"
+            mmr_str = mmr_str.ljust(MMR_WIDTH)
+
+            status = acc.status if acc.status else "(нет)"
+            if len(status) > STATUS_WIDTH - 3:
+                status = status[:STATUS_WIDTH - 3] + "..."
+            status_str = status.ljust(STATUS_WIDTH)
+
+            rented = "✅" if getattr(acc, "is_rented", False) else "❌"
+            rented_str = rented.ljust(RENTED_WIDTH)
+
+            rows += f"{id_str}{login_str}{behavior_str}{mmr_str}{status_str}{rented_str}\n"
+
+        text = f"🗑️ <b>Выберите аккаунт для удаления:</b>\n\n<pre>{header}{rows}</pre>"
+
+        # Кнопки с ID аккаунта по 3 в ряд
+        buttons = []
+        row_buttons = []
+        for acc in accounts:
+            btn = InlineKeyboardButton(
+                f"ID {acc.id}",
+                callback_data=f"delete_acc_{acc.id}"
+            )
+            row_buttons.append(btn)
+            if len(row_buttons) == 3:
+                buttons.append(row_buttons)
+                row_buttons = []
+        if row_buttons:
+            buttons.append(row_buttons)
+
         buttons.append([InlineKeyboardButton("Отмена", callback_data="admin_back")])
-        await update.callback_query.edit_message_text("Выберите аккаунт для удаления:", reply_markup=InlineKeyboardMarkup(buttons))
+
+        await update.callback_query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode="HTML"
+        )
     finally:
         session.close()
+
     return ADMIN_DELETE_CHOOSE_ID
 
 async def admin_delete_choose_account(update: Update, context: CallbackContext):
