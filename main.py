@@ -410,12 +410,16 @@ async def rent_start(update: Update, context: CallbackContext):
 
 async def cancel_rent(update: Update, context: CallbackContext):
     query = update.callback_query
-    if query:
-        await query.answer()
-        # Просто возвращаем главное меню, не делая ничего лишнего
-        await query.edit_message_text("Главное меню", reply_markup=main_menu_keyboard(query.from_user.id))
-    elif update.message:
-        await update.message.reply_text("Главное меню", reply_markup=main_menu_keyboard(update.effective_user.id))
+    await query.answer()
+
+    # ⚡ ставим флаг отмены
+    context.user_data["cancelled_code"] = True
+    logging.info(f"[cancel_rent] Пользователь {query.from_user.id} отменил аренду")
+
+    await query.edit_message_text(
+        "❌ Аренда отменена. Возврат в главное меню.",
+        reply_markup=main_menu_keyboard(query.from_user.id)
+    )
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -553,98 +557,120 @@ async def confirm_2fa_handler(update: Update, context: CallbackContext):
     finally:
         session.close()
 
-async def wait_for_code_and_confirm(update: Update, context: CallbackContext):
+async def wait_for_code_and_confirm(update, context):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
 
+    # Получаем данные аренды
     data = context.user_data.get("pending_rent")
     if not data:
-        await query.edit_message_text("Ошибка: неправильные данные.", reply_markup=main_menu_keyboard(user_id))
+        await query.edit_message_text(
+            "Ошибка: неправильные данные.",
+            reply_markup=main_menu_keyboard(user_id)
+        )
         return ConversationHandler.END
 
     acc_id = data["acc_id"]
     email_login = data.get("email_login")
     email_password = data.get("email_password")
 
-    if not email_login or not email_password:
-        await query.edit_message_text("Ошибка: получения кода с почты.", reply_markup=main_menu_keyboard(user_id))
-        return ConversationHandler.END
-
+    # Получаем аккаунт через отдельную сессию
     session = Session()
-    acc = session.query(Account).filter_by(id=acc_id).first()
-    session.close()
-    if not acc:
-        await query.edit_message_text("Ошибка: аккаунт не найден.", reply_markup=main_menu_keyboard(user_id))
-        return ConversationHandler.END
-
-    total_attempts = 30
-    wait_seconds = 10
-
-    cancel_markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🚫 Отменить аренду", callback_data="cancel_rent")]
-    ])
+    try:
+        acc = session.query(Account).filter_by(id=acc_id).first()
+        if not acc:
+            await query.edit_message_text(
+                "Ошибка: аккаунт не найден.",
+                reply_markup=main_menu_keyboard(user_id)
+            )
+            return ConversationHandler.END
+    finally:
+        session.close()
 
     reader = FirstMailCodeReader(email_login, email_password)
 
     await query.edit_message_text(
         f"👤 Логин: `{acc.login}`\n"
         f"🔐 Пароль: `{acc.password}`\n\n"
-        f"📥 Начинаю поиск кода Steam Guard...\n"
-        f"⏳ Максимальное время ожидания: {total_attempts * wait_seconds // 60} мин.",
-        parse_mode="Markdown",
-        reply_markup=cancel_markup
+        f"📥 Ищу код Steam Guard...\n"
+        f"⏳ Это может занять до 1 минуты.",
+        parse_mode="Markdown"
     )
-    await asyncio.sleep(2)
-    for attempt in range(total_attempts):
-        since_dt = context.user_data.get("code_wait_start")
-        if since_dt:
-            since_dt = since_dt - timedelta(minutes=5)
 
-        code = reader.fetch_latest_code(since_dt=since_dt)
-        if code:
-            # Обновляем статус аккаунта в базе
+    now = datetime.now(timezone.utc)
+    two_minutes_ago = now - timedelta(minutes=2)
+
+    # 1. Сначала проверяем письма за последние 2 минуты
+    result = reader.fetch_latest_code(since_dt=two_minutes_ago)
+    last_found_code = None
+    last_found_date = None
+
+    if result:
+        last_found_code, last_found_date = result
+        # Если письмо пришло максимум 2 минуты назад — сразу возвращаем
+        if last_found_date >= two_minutes_ago:
+            pass  # last_found_code и last_found_date уже установлены
+    else:
+        # 2. Если таких писем нет, ждем новые письма в течение 1 минуты
+        total_seconds = 60
+        interval = 5
+        start_time = datetime.now(timezone.utc)
+
+        for _ in range(total_seconds // interval):
+            result = reader.fetch_latest_code(since_dt=start_time)
+            if result:
+                last_found_code, last_found_date = result
+                # новое письмо пришло после начала ожидания
+                if last_found_date >= start_time:
+                    break
+            await asyncio.sleep(interval)
+
+        # 3. Если за минуту не пришло новых писем — ищем самое последнее письмо вообще
+        if not last_found_code:
+            result = reader.fetch_latest_code(since_dt=None)
+            if result:
+                last_found_code, last_found_date = result
+
+    # Логируем результат
+    session = Session()
+    try:
+        if last_found_code:
+            session.add(AccountLog(
+                user_id=user_id,
+                account_id=acc_id,
+                action='Арендован (Успешно арендован с 2FA)',
+                action_date=acc.rented_at
+            ))
+            session.commit()
+
             await query.edit_message_text(
                 f"✅ Аккаунт успешно арендован!\n"
                 f"👤 Логин: `{acc.login}`\n"
                 f"🔐 Пароль: `{acc.password}`\n\n"
-                f"📩 Код Steam: `{code}`\n"
-                f"🆔 Аккаунт ID: {acc.id}",
+                f"📩 Код Steam: `{last_found_code}`\n"
+                f"🆔 Аккаунт ID: {acc.id}\n\n"
+                f"⚠️ Если код не подошёл, верните аккаунт и попробуйте арендовать его снова.",
                 parse_mode="Markdown",
                 reply_markup=main_menu_keyboard(user_id)
             )
+        else:
             session.add(AccountLog(
                 user_id=user_id,
-                account_id=acc.id,
-                action='Арендован (с 2FA)',
+                account_id=acc_id,
+                action='Арендован (c 2FA, код не получен)',
                 action_date=acc.rented_at
             ))
-            context.user_data.clear()
-            return ConversationHandler.END
-
-        else:
+            session.commit()
 
             await query.edit_message_text(
-                f"👤 Логин: `{acc.login}`\n"
-                f"🔐 Пароль: `{acc.password}`\n\n"
-                f"📥 Ожидаю код Steam Guard... Попытка {attempt + 1} из {total_attempts}",
-                parse_mode="Markdown",
-                reply_markup=cancel_markup
+                "⚠️ Не удалось получить код Steam.\n"
+                "Попробуйте позже. Если код не подошёл, верните аккаунт и арендуйте его снова.",
+                reply_markup=main_menu_keyboard(user_id)
             )
-            await asyncio.sleep(wait_seconds)
+    finally:
+        session.close()
 
-    # Если код не пришёл
-    await query.edit_message_text(
-        f"⚠️ Не удалось получить код Steam в течение {total_attempts * wait_seconds // 60} минут.\n"
-        "Попробуйте позже.",
-        reply_markup=main_menu_keyboard(user_id)
-    )
-    session.add(AccountLog(
-        user_id=user_id,
-        account_id=acc.id,
-        action='Арендован (Ошибка получения кода с почты)',
-        action_date=acc.rented_at
-    ))
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -1627,21 +1653,23 @@ def main():
         ],
         states={
             USER_RENT_SELECT_ACCOUNT: [
-                CallbackQueryHandler(rent_select_account, pattern="^rent_acc_\\d+$")
+                CallbackQueryHandler(rent_select_account, pattern="^rent_acc_\\d+$"),
+                CallbackQueryHandler(cancel_rent, pattern="^cancel_rent$")
             ],
             USER_RENT_SELECT_DURATION: [
-                CallbackQueryHandler(rent_select_duration, pattern="^rent_dur_\\d+$")
+                CallbackQueryHandler(rent_select_duration, pattern="^rent_dur_\\d+$"),
+                CallbackQueryHandler(cancel_rent, pattern="^cancel_rent$")
             ],
             WAIT_FOR_2FA_CONFIRM: [
-                CallbackQueryHandler(confirm_2fa_handler, pattern="^confirm_2fa_(yes|no)$")
+                CallbackQueryHandler(confirm_2fa_handler, pattern="^confirm_2fa_(yes|no)$"),
+                CallbackQueryHandler(cancel_rent, pattern="^cancel_rent$")
             ],
             WAIT_FOR_EMAIL_CODE: [
-                CallbackQueryHandler(wait_for_code_and_confirm, pattern="^wait_for_code$")
+                CallbackQueryHandler(wait_for_code_and_confirm, pattern="^wait_for_code$"),
+                CallbackQueryHandler(cancel_rent, pattern="^cancel_rent$")
             ],
         },
-        fallbacks=[
-            CallbackQueryHandler(cancel_rent, pattern="^cancel_rent$")
-        ],
+        fallbacks=[],
         allow_reentry=True
     )
     app.add_handler(rent_conv)
